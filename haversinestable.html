@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HVRSN - I Hate Spreadsheets</title> <!-- Titel vertaald -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin="anonymous"></script>
+    <!-- Polyline decoding library - Included for completeness, though GeoJSON endpoint handles geometry directly -->
+    <!-- <script src="https://unpkg.com/@mapbox/polyline@1.1.1/src/polyline.js"></script> -->
+
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            overflow: hidden;
+            background-color: #f0f2f5; /* Overall app background */
+        }
+
+        #app-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 440px;
+            background-color: #f0f2f5; /* Matches app background, sections will be distinct */
+            padding: 20px; /* Overall padding for sidebar */
+            /* box-shadow: 1px 0 0px rgba(0, 0, 0, 0.1) inset; */ /* Subtle inner right shadow / border */
+            border-right: 1px solid #d1d1d6;
+            overflow-y: auto;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        #sidebar h2 { /* Main Title "Haversine" */
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #1d1d1f;
+            font-size: 1.7em;
+            font-weight: 600;
+        }
+
+        /* Common style for sidebar sections */
+        .sidebar-section {
+            background-color: #ffffff;
+            padding: 18px;
+            border-radius: 10px;
+            margin-bottom: 18px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.04);
+        }
+
+        #mode-selector,
+        #popup-toggle-container,
+        #profile-selector,
+        #instructions {
+            /* Apply common section styling */
+            background-color: #ffffff;
+            padding: 18px 20px; /* Slightly more horizontal padding */
+            border-radius: 10px;
+            margin-bottom: 18px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
+        }
+         #profile-selector {
+             display: none; /* Hidden by default, shown when mode is 'directions' */
+         }
+
+        /* Styling for labels and inputs within sections */
+        #mode-selector label,
+        #profile-selector label,
+        #popup-toggle-container label {
+            margin-right: 10px; /* Spacing between radio/checkbox options */
+            margin-bottom: 8px; /* Spacing if they wrap */
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.95em;
+            color: #333333;
+            cursor: pointer;
+            position: relative; /* For custom styling if ever needed */
+        }
+
+        #mode-selector input[type="radio"],
+        #profile-selector input[type="radio"],
+        #popup-toggle-container input[type="checkbox"] {
+            margin-right: 8px;
+            accent-color: #007aff; /* Apple blue */
+            transform: scale(1.1); /* Slightly larger */
+            cursor: pointer;
+        }
+
+        #profile-selector h3 { /* "Route Type:" heading */
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #6e6e73; /* Apple secondary text */
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #instructions {
+            /* Already styled as a section */
+            color: #333333; /* Standard text color */
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        #instructions p {
+            margin-top: 0;
+            margin-bottom: 8px;
+        }
+        #instructions p:last-child {
+            margin-bottom: 0;
+        }
+
+
+        #reset-selection {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 18px;
+            margin-bottom: 18px;
+            background-color: #2d93ff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            text-align: center;
+        }
+        #reset-selection:hover {
+            background-color: #005bb5;
+        }
+
+        #location-list {
+            list-style-type: none;
+            padding: 8px; /* Padding inside the list container */
+            margin: 0 0 18px 0;
+            background-color: #ffffff; /* White background for the list block */
+            border-radius: 10px; /* Rounded corners for the block */
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
+        }
+
+        #location-list li {
+            padding: 11px 14px; /* Generous padding for touch */
+            cursor: pointer;
+            border-bottom: none; /* Removed individual borders */
+            transition: background-color 0.15s ease, color 0.15s ease;
+            font-size: 0.95em;
+            color: #1d1d1f;
+            border-radius: 7px; /* Rounded list items */
+            margin-bottom: 4px; /* Space between items */
+        }
+        #location-list li:last-child {
+            margin-bottom: 0;
+        }
+
+        #location-list li:hover {
+            background-color: #f0f2f5; /* Subtle hover, matches sidebar bg */
+        }
+        #location-list li.selected-haversine {
+            background-color: #007aff; /* Apple Blue */
+            color: white;
+            font-weight: 500;
+        }
+        #location-list li.selected-directions-start {
+            background-color: #56a8ff; /* Apple Blue for start */
+            color: white;
+            font-weight: 500;
+        }
+        #location-list li.selected-directions-end {
+            background-color: #67e186; /* Apple Green for end */
+            color: white;
+            font-weight: 500;
+        }
+
+
+        #map-container {
+            flex-grow: 1;
+            height: 100vh;
+        }
+
+        .info-panel {
+            margin-top: 0; /* Handled by section margin-bottom */
+            margin-bottom: 18px; /* If it's the last one, this could be removed via :last-child */
+            padding: 18px 20px;
+            border-top: none; /* Removed, using section style */
+            display: none; /* Initially hidden */
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
+        }
+        #sidebar > .info-panel:last-of-type { /* If an info panel is the true last item in sidebar */
+             margin-bottom: 0;
+        }
+
+
+        .info-panel h3 {
+            font-size: 1.0em;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .info-panel ul, .info-panel div {
+            font-size: 0.92em;
+            list-style-type: none;
+            padding: 0;
+            color: #333333;
+        }
+        .info-panel li {
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f2f5; /* Very subtle dashed border */
+        }
+        .info-panel li:last-child {
+            border-bottom: none;
+        }
+        .info-panel .error-message, .info-panel .loading-message {
+            font-style: normal;
+            padding: 5px 0;
+        }
+        .info-panel .error-message {
+            color: #ff3b30; /* Apple Red */
+            font-weight: 500;
+        }
+        .info-panel .loading-message {
+            color: #555555;
+        }
+         #selected-location-name-haversine {
+             font-weight: 600;
+             color: #007aff;
+         }
+        #selected-location-name-directions-start, #selected-location-name-directions-end {
+            font-weight: 600;
+        }
+         #selected-location-name-directions-start { color: #4da1fa; }
+         #selected-location-name-directions-end { color: #55c671; }
+
+
+         /* Custom Popup Styling */
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: #ffffff;
+            border-radius: 12px; /* iOS like rounded corners */
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); /* Softer, more prominent shadow */
+            padding: 0; /* Remove padding, content will handle it */
+            border: 0.5px solid rgba(0,0,0,0.08); /* Very subtle border */
+        }
+
+        .custom-popup .leaflet-popup-content {
+            margin: 0; /* Reset margin */
+            padding: 12px 15px; /* Padding inside the content area */
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: #1d1d1f; /* Dark text */
+            max-height: 70px; /* Increased max-height */
+            overflow-y: auto; /* Scrollbar if content exceeds max-height */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        }
+        .custom-popup .leaflet-popup-content b {
+            font-weight: 600;
+            color: #000000; /* Pure black for titles in popup */
+        }
+        .custom-popup .leaflet-popup-content br {
+            display: block; /* Make <br> create more space */
+            margin-bottom: 3px;
+        }
+
+        .custom-popup .leaflet-popup-tip-container {
+            /* Tip styling can be complex, this ensures it matches background */
+        }
+        .custom-popup .leaflet-popup-tip {
+             background: #ffffff;
+             border: 0.5px solid rgba(0,0,0,0.08);
+             box-shadow: none; /* Remove default tip shadow if wrapper has a good one */
+        }
+
+
+        .custom-popup a.leaflet-popup-close-button {
+            position: absolute;
+            top: 8px; /* Adjust for better alignment */
+            right: 10px;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            font-size: 22px; /* Slightly larger 'x' */
+            line-height: 24px;
+            color: #b0b0b5; /* Lighter close button color */
+            text-align: center;
+            text-decoration: none;
+            font-weight: normal; /* Normal weight for modern 'x' */
+            background: transparent;
+            border-radius: 50%; /* Circular hit area */
+            transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        .custom-popup a.leaflet-popup-close-button:hover {
+            color: #1d1d1f; /* Darker on hover */
+            background-color: rgba(0,0,0,0.05); /* Subtle hover background */
+        }
+
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div id="sidebar">
+            <h2>Haversine</h2> <!-- Titel -->
+
+            <div id="mode-selector" class="sidebar-section"> <!-- Added sidebar-section class (optional if styled by ID) -->
+                <label><input type="radio" name="mode" value="haversine" checked> Afstanden Tot Alle</label>
+                <label><input type="radio" name="mode" value="directions"> Route Tussen Punten</label>
+            </div>
+
+            <div id="popup-toggle-container" class="sidebar-section">
+                 <label>
+                     <input type="checkbox" id="show-all-popups-toggle">
+                     Toon alle locatie namen op kaart
+                 </label>
+            </div>
+
+            <div id="profile-selector" class="sidebar-section">
+                 <h3>Route Type:</h3>
+                 <label><input type="radio" name="profile" value="driving-car" checked> Auto</label>
+                 <label><input type="radio" name="profile" value="cycling-regular"> Fiets</label>
+            </div>
+
+
+            <div id="instructions" class="sidebar-section">
+                <!-- Instructions will be updated by JS -->
+            </div>
+
+            <button id="reset-selection">Selectie Herstellen</button>
+
+            <ul id="location-list"></ul>
+
+            <!-- Haversine Info Panel -->
+            <div id="haversine-info" class="info-panel"> <!-- Will adopt .info-panel styles -->
+                <h3>Afstanden vanaf <span id="selected-location-name-haversine">nvt</span> (Rechte Lijn):</h3>
+                <ul id="haversine-distance-list"></ul>
+            </div>
+
+            <!-- Directions Info Panel -->
+            <div id="directions-info" class="info-panel"> <!-- Will adopt .info-panel styles -->
+                <h3>Route Details (<span id="current-profile-display">Auto</span>):</h3>
+                <div id="directions-route-summary"></div>
+            </div>
+        </div>
+        <div id="map-container"></div>
+    </div>
+
+    <script>
+        // --- YOUR OPENROUTESERVICE API KEY ---
+        const ORS_API_KEY = "5b3ce3597851110001cf6248b3f2a09866064cc299ac8aacef0bdfa2"; // Example key
+        // --- END CONFIGURATION ---
+
+        const locations = [
+            { id: 'rabot', title: 'Wijkkantoor Rabot', location: { lat: 51.0601875, lng: 3.711071 } },
+            { id: 'vlaamsekaai', title: 'Kringwinkel Vlaamse Kaai', location: { lat: 51.044070, lng: 3.741510 } },
+            { id: 'uco', title: 'Kringwinkel UCO', location: { lat: 51.071849, lng: 3.7140459 } },
+            { id: 'brugsesteenweg', title: 'Kringwinkel Brugsesteenweg', location: { lat: 51.0686483, lng: 3.6858181 } },
+            { id: 'stadskantoor', title: 'Stadskantoor', location: { lat: 51.0472122, lng: 3.73093 } },
+            { id: 'bibsintamandsberg', title: 'Wijkbibliotheek Sint-Amandsberg', location: { lat: 51.0616959, lng: 3.7453856 } },
+            { id: 'bibbrugsepoort', title: 'Wijkbibliotheek Brugse Poort', location: { lat: 51.0625967, lng: 3.6971764 } },
+            { id: 'bibwatersportbaan', title: 'Wijkbibliotheek Watersportbaan', location: { lat: 51.0437767, lng: 3.7080733 } },
+            { id: 'deserre', title: 'De Serre', location: { lat: 51.0236304, lng: 3.7194702 } },
+            { id: 'eetcafe', title: 'Eetcafé Toreke', location: { lat: 51.0633212, lng: 3.7118666 } },
+            { id: 'amal', title: 'AMAL', location: { lat: 51.0606253, lng: 3.7319163 } },
+            { id: 'scheldeoord', title: 'Scheldeoord', location: { lat: 51.0494794, lng: 3.7459217 } },
+            { id: 'jobteam', title: 'Jobteam', location: { lat: 51.0544096, lng: 3.7485595 } },
+            { id: 'wgcsintamandsberg', title: 'WGC Sint-Amandsberg', location: { lat: 51.0521143, lng: 3.74279 } }
+        ];
+
+        let map;
+        const mapMarkers = {};
+        let drawnHaversinePolylines = [];
+        let drawnDirectionsRoutePolyline = null;
+
+        // App State
+        let currentMode = 'haversine';
+        let haversineSelectedLocation = null;
+        let directionsStartLocation = null;
+        let directionsEndLocation = null;
+        let selectedRouteProfile = 'driving-car';
+        let showAllPopups = false;
+
+        // DOM Elements
+        const locationListEl = document.getElementById('location-list');
+        const instructionsEl = document.getElementById('instructions');
+        const resetButton = document.getElementById('reset-selection');
+        const haversineInfoDiv = document.getElementById('haversine-info');
+        const haversineDistanceListEl = document.getElementById('haversine-distance-list');
+        const selectedLocationNameHaversineEl = document.getElementById('selected-location-name-haversine');
+        const directionsInfoDiv = document.getElementById('directions-info');
+        const directionsRouteSummaryEl = document.getElementById('directions-route-summary');
+        const modeRadioButtons = document.querySelectorAll('input[name="mode"]');
+        const profileSelectorDiv = document.getElementById('profile-selector');
+        const profileRadioButtons = document.querySelectorAll('input[name="profile"]');
+        const currentProfileDisplayEl = document.getElementById('current-profile-display');
+        const showAllPopupsToggle = document.getElementById('show-all-popups-toggle');
+
+
+        function toRad(x) { return x * Math.PI / 180; }
+
+        function haversineDistance(coords1, coords2) {
+            const R = 6371;
+            const dLat = toRad(coords2.lat - coords1.lat);
+            const dLon = toRad(coords2.lng - coords1.lng);
+            const lat1 = toRad(coords1.lat);
+            const lat2 = toRad(coords2.lat);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function openAllPopups() {
+             for (const id in mapMarkers) {
+                if (mapMarkers.hasOwnProperty(id)) mapMarkers[id].openPopup();
+            }
+        }
+
+        function closeAllPopups() {
+             for (const id in mapMarkers) {
+                if (mapMarkers.hasOwnProperty(id)) mapMarkers[id].closePopup();
+            }
+        }
+
+        function updatePopupVisibility() {
+            closeAllPopups();
+            if (showAllPopups) {
+                openAllPopups();
+            } else {
+                if (currentMode === 'haversine' && haversineSelectedLocation) {
+                    if (mapMarkers[haversineSelectedLocation.id]) mapMarkers[haversineSelectedLocation.id].openPopup();
+                } else if (currentMode === 'directions') {
+                    if (directionsStartLocation && mapMarkers[directionsStartLocation.id]) {
+                        mapMarkers[directionsStartLocation.id].openPopup();
+                    }
+                    if (directionsEndLocation && mapMarkers[directionsEndLocation.id]) {
+                        mapMarkers[directionsEndLocation.id].openPopup();
+                    }
+                }
+            }
+        }
+
+        function resetAllPopupContent() {
+             locations.forEach(loc => {
+                if (mapMarkers[loc.id]) {
+                    mapMarkers[loc.id].setPopupContent(`<b>${loc.title}</b>`);
+                }
+            });
+        }
+
+        function clearMapDrawings() {
+            drawnHaversinePolylines.forEach(line => map.removeLayer(line));
+            drawnHaversinePolylines = [];
+            if (drawnDirectionsRoutePolyline) {
+                map.removeLayer(drawnDirectionsRoutePolyline);
+                drawnDirectionsRoutePolyline = null;
+            }
+        }
+
+        function clearSelectionsAndUI() {
+            haversineSelectedLocation = null;
+            directionsStartLocation = null;
+            directionsEndLocation = null;
+
+            document.querySelectorAll('#location-list li').forEach(item => {
+                item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end');
+            });
+
+            clearMapDrawings();
+            resetAllPopupContent();
+
+            haversineInfoDiv.style.display = 'none';
+            haversineDistanceListEl.innerHTML = '';
+            selectedLocationNameHaversineEl.textContent = 'nvt';
+
+            directionsInfoDiv.style.display = 'none';
+            directionsRouteSummaryEl.innerHTML = '';
+            currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
+
+             if (currentMode === 'haversine' && haversineSelectedLocation) {
+                 haversineInfoDiv.style.display = 'block';
+             } else {
+                  haversineInfoDiv.style.display = 'none';
+             }
+             if (currentMode === 'directions' && (directionsStartLocation || directionsEndLocation)) {
+                  directionsInfoDiv.style.display = 'block';
+             } else {
+                 directionsInfoDiv.style.display = 'none';
+             }
+             updatePopupVisibility();
+        }
+
+        function getProfileDisplayName(profileValue) {
+            switch(profileValue) {
+                case 'driving-car': return 'Auto';
+                case 'cycling-regular': return 'Fiets';
+                default: return profileValue;
+            }
+        }
+
+        function updateInstructions() {
+            if (currentMode === 'haversine') {
+                instructionsEl.innerHTML = `<p>Klik een locatie aan om de afstanden in rechte lijn tot alle andere locaties te zien.</p>`;
+                profileSelectorDiv.style.display = 'none';
+            } else if (currentMode === 'directions') {
+                profileSelectorDiv.style.display = 'block';
+                let instructionText = "<p>1. Klik een locatie aan om te selecteren als STARTPUNT.</p>";
+                if (directionsStartLocation && !directionsEndLocation) {
+                    instructionText += `<p>Geselecteerd Startpunt: <span id="selected-location-name-directions-start">${directionsStartLocation.title}</span></p>`;
+                    instructionText += "<p>2. Klik een andere locatie aan om te selecteren als EINDPUNT.</p>";
+                } else if (directionsStartLocation && directionsEndLocation) {
+                     instructionText += `<p>Route van <span id="selected-location-name-directions-start">${directionsStartLocation.title}</span> naar <span id="selected-location-name-directions-end">${directionsEndLocation.title}</span> getoond.</p>`;
+                     instructionText += "<p>Klik op 'Selectie Herstellen' of een nieuwe locatie om een nieuwe route te starten.</p>";
+                }
+                instructionsEl.innerHTML = instructionText;
+            }
+        }
+
+        function displayHaversineDistances(selectedLoc) {
+            clearMapDrawings();
+            haversineSelectedLocation = selectedLoc;
+
+            selectedLocationNameHaversineEl.textContent = selectedLoc.title;
+            haversineDistanceListEl.innerHTML = '';
+            haversineInfoDiv.style.display = 'block';
+            directionsInfoDiv.style.display = 'none';
+
+            map.setView(selectedLoc.location, 13);
+
+            const distancesData = [];
+            locations.forEach(otherLoc => {
+                 const marker = mapMarkers[otherLoc.id];
+                 if (!marker) return;
+
+                 if (otherLoc.id === selectedLoc.id) {
+                     marker.setPopupContent(`<b>${otherLoc.title}</b>`);
+                 } else {
+                     const distance = haversineDistance(selectedLoc.location, otherLoc.location);
+                     marker.setPopupContent(`<b>${otherLoc.title}</b><br>Afstand: ${distance.toFixed(2)} km`);
+
+                     distancesData.push({
+                         id: otherLoc.id,
+                         title: otherLoc.title,
+                         distance: distance,
+                         location: otherLoc.location
+                     });
+                     const line = L.polyline([selectedLoc.location, otherLoc.location], { color: '#ff0000', weight: 2.5, opacity: 0.7 }).addTo(map); // Changed line color
+                     drawnHaversinePolylines.push(line);
+                 }
+            });
+
+            distancesData.sort((a, b) => a.distance - b.distance);
+            distancesData.forEach(data => {
+                const listItem = document.createElement('li');
+                listItem.textContent = `${data.title}: ${data.distance.toFixed(2)} km`;
+                haversineDistanceListEl.appendChild(listItem);
+            });
+            updatePopupVisibility(); // Ensure correct popups are open
+        }
+
+        async function fetchAndDrawORSRoute(startLoc, endLoc) {
+            clearMapDrawings();
+            resetAllPopupContent();
+
+            directionsRouteSummaryEl.innerHTML = `<p class="loading-message">Route berekenen voor ${getProfileDisplayName(selectedRouteProfile)}...</p>`;
+            directionsInfoDiv.style.display = 'block';
+            haversineInfoDiv.style.display = 'none';
+
+             if (!ORS_API_KEY || ORS_API_KEY === "YOUR_ORS_API_KEY_HERE" || ORS_API_KEY === "5b3ce3597851110001cf6248b3f2a09866064cc299ac8aacef0bdfa2") { // Check for example key too
+                 const apiKeyMessage = ORS_API_KEY === "5b3ce3597851110001cf6248b3f2a09866064cc299ac8aacef0bdfa2" ? "De meegeleverde OpenRouteService API Sleutel is een voorbeeld en kan rate limits hebben." : "OpenRouteService API Sleutel is niet ingesteld.";
+                 directionsRouteSummaryEl.innerHTML = `<p class="error-message">${apiKeyMessage} Kan geen routes berekenen.</p>`;
+                 updatePopupVisibility();
+                 // For demo, don't return, let it try to fetch with example key if it's that one
+                 if (ORS_API_KEY !== "5b3ce3597851110001cf6248b3f2a09866064cc299ac8aacef0bdfa2") {
+                    return;
+                 }
+             }
+
+
+            const requestBody = {
+                coordinates: [
+                    [startLoc.location.lng, startLoc.location.lat],
+                    [endLoc.location.lng, endLoc.location.lat]
+                ]
+            };
+
+            try {
+                const apiUrl = `https://api.openrouteservice.org/v2/directions/${selectedRouteProfile}/geojson`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': ORS_API_KEY,
+                        'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+                        'Content-Type': 'application/json; charset=utf-8'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    let errorData;
+                    try { errorData = await response.json(); } catch (e) { errorData = { error: {message: "Kon ORS foutmelding niet verwerken.", details: await response.text()} }; }
+                    console.error("ORS API Error Data:", errorData); // Log error data
+                    throw new Error(`ORS API Fout (${response.status}): ${errorData.error?.message || 'Onbekende fout'}.`);
+                }
+
+                const data = await response.json();
+
+                if (data.features && data.features.length > 0) {
+                    const route = data.features[0];
+                    drawnDirectionsRoutePolyline = L.geoJSON(route.geometry, {
+                        style: () => ({ color: "#ff0000", weight: 5, opacity: 0.8 }) // Changed route color
+                    }).addTo(map);
+
+                    const distMeters = route.properties?.summary?.distance || 0;
+                    const durSeconds = route.properties?.summary?.duration || 0;
+                    const distKm = (distMeters / 1000).toFixed(2);
+                    const durMin = (durSeconds / 60).toFixed(1);
+
+                    directionsRouteSummaryEl.innerHTML = `
+                        <p><strong>Van:</strong> ${startLoc.title}</p>
+                        <p><strong>Naar:</strong> ${endLoc.title}</p>
+                        <p><strong>Profiel:</strong> ${getProfileDisplayName(selectedRouteProfile)}</p>
+                        <p><strong>Afstand:</strong> ${distKm} km</p>
+                        <p><strong>Geschatte Duur:</strong> ${durMin} min</p>
+                    `;
+                    if (mapMarkers[startLoc.id]) {
+                        mapMarkers[startLoc.id].setPopupContent(`<b>${startLoc.title} (Start)</b><br>${distKm} km / ${durMin} min`);
+                    }
+                    if (mapMarkers[endLoc.id]) {
+                         mapMarkers[endLoc.id].setPopupContent(`<b>${endLoc.title} (Eind)</b><br>${distKm} km / ${durMin} min`);
+                    }
+
+                    if (drawnDirectionsRoutePolyline.getBounds().isValid()) {
+                        map.fitBounds(drawnDirectionsRoutePolyline.getBounds().pad(0.1));
+                    } else {
+                         map.setView(startLoc.location, 14);
+                    }
+
+                } else {
+                    directionsRouteSummaryEl.innerHTML = `<p class="error-message">Geen route gevonden voor ${getProfileDisplayName(selectedRouteProfile)} tussen deze locaties.</p>`;
+                    resetAllPopupContent();
+                }
+            } catch (error) {
+                 console.error("Fout bij ophalen ORS route:", error);
+                 directionsRouteSummaryEl.innerHTML = `<p class="error-message">Route berekening mislukt. ${error.message}</p>`;
+                 resetAllPopupContent();
+            } finally {
+                updatePopupVisibility();
+            }
+        }
+
+        function handleModeChange(event) {
+            currentMode = event.target.value;
+            clearSelectionsAndUI();
+            updateInstructions();
+        }
+
+        function handleProfileChange(event) {
+            selectedRouteProfile = event.target.value;
+            currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
+            if (directionsStartLocation && directionsEndLocation) {
+                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+            } else {
+                 clearMapDrawings();
+                 if (directionsStartLocation) {
+                    directionsRouteSummaryEl.innerHTML = `Selecteer Eindpunt voor ${getProfileDisplayName(selectedRouteProfile)} route...`;
+                    directionsInfoDiv.style.display = 'block';
+                 } else {
+                    directionsRouteSummaryEl.innerHTML = '';
+                 }
+            }
+        }
+
+        showAllPopupsToggle.addEventListener('change', function() {
+            showAllPopups = this.checked;
+            updatePopupVisibility();
+        });
+
+        modeRadioButtons.forEach(radio => radio.addEventListener('change', handleModeChange));
+        profileRadioButtons.forEach(radio => radio.addEventListener('change', handleProfileChange));
+        resetButton.addEventListener('click', () => {
+            clearSelectionsAndUI();
+            updateInstructions();
+        });
+
+        function handleLocationClick(clickedLocData, clickedListItemEl) {
+             if (!showAllPopups) {
+                 closeAllPopups();
+                 if (mapMarkers[clickedLocData.id]) {
+                     mapMarkers[clickedLocData.id].openPopup();
+                 }
+             }
+
+            document.querySelectorAll('#location-list li').forEach(item => {
+                item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end');
+            });
+
+            if (currentMode === 'haversine') {
+                if (haversineSelectedLocation && haversineSelectedLocation.id === clickedLocData.id) {
+                    clearSelectionsAndUI();
+                } else {
+                     if (haversineSelectedLocation) {
+                         clearSelectionsAndUI();
+                     }
+                    haversineSelectedLocation = clickedLocData;
+                    clickedListItemEl.classList.add('selected-haversine');
+                    displayHaversineDistances(clickedLocData); // Sets content & calls updatePopupVisibility
+                }
+            } else if (currentMode === 'directions') {
+                if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) {
+                    clearSelectionsAndUI();
+                    directionsStartLocation = clickedLocData;
+                    clickedListItemEl.classList.add('selected-directions-start');
+                    map.setView(clickedLocData.location, 14);
+                    directionsInfoDiv.style.display = 'block';
+                    updatePopupVisibility();
+
+                } else if (directionsStartLocation && !directionsEndLocation && clickedLocData.id !== directionsStartLocation.id) {
+                    directionsEndLocation = clickedLocData;
+                    clickedListItemEl.classList.add('selected-directions-end');
+                    const startLi = document.querySelector(`#location-list li[data-id="${directionsStartLocation.id}"]`);
+                    if (startLi) startLi.classList.add('selected-directions-start');
+                    fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation); // Sets content & calls updatePopupVisibility
+
+                } else if (directionsStartLocation && clickedLocData.id === directionsStartLocation.id) {
+                    clearSelectionsAndUI();
+                }
+            }
+            updateInstructions();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            map = L.map('map-container').setView([51.053, 3.725], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> medewerkers & Routing via <a href="https://openrouteservice.org/">OpenRouteService</a>'
+            }).addTo(map);
+
+            locations.forEach((loc) => {
+                const marker = L.marker(loc.location)
+                    .addTo(map)
+                    .bindPopup(`<b>${loc.title}</b>`, { autoClose: false, className: 'custom-popup' });
+                mapMarkers[loc.id] = marker;
+
+                const listItem = document.createElement('li');
+                listItem.textContent = loc.title;
+                listItem.setAttribute('data-id', loc.id);
+                listItem.addEventListener('click', () => handleLocationClick(loc, listItem));
+                locationListEl.appendChild(listItem);
+
+                marker.on('click', () => {
+                     const li = document.querySelector(`#location-list li[data-id="${loc.id}"]`);
+                     if (li) handleLocationClick(loc, li);
+                });
+            });
+
+            showAllPopups = showAllPopupsToggle.checked;
+            updateInstructions();
+            profileSelectorDiv.style.display = 'none';
+            currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
+            updatePopupVisibility();
+        });
+    </script>
+</body>
+</html>
