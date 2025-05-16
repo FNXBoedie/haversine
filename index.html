@@ -376,7 +376,7 @@
                  <h3>Route Type:</h3>
                  <label><input type="radio" name="profile" value="driving-car" checked> Auto</label>
                  <label><input type="radio" name="profile" value="cycling-regular"> Fiets</label>
-                 <label><input type="radio" name="foot-walking"> Voetganger</label> <!-- Added walking profile -->
+                 <label><input type="radio" name="profile" value="foot-walking"> Voetganger</label> <!-- CORRECTED: Added name="profile" and value="foot-walking" -->
             </div>
 
 
@@ -1063,6 +1063,9 @@
 
 
             // --- Attach Event Listeners ---
+            // Re-fetch profileRadioButtons *after* DOM is fully loaded and potentially modified (though in this case, it's static HTML)
+            const profileRadioButtons = document.querySelectorAll('input[name="profile"]'); // Ensure this selector is up-to-date
+
             modeRadioButtons.forEach(radio => radio.addEventListener('change', handleModeChange));
             profileRadioButtons.forEach(radio => radio.addEventListener('change', handleProfileChange));
             resetButton.addEventListener('click', () => {
