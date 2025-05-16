@@ -36,12 +36,28 @@
             width: 440px;
             background-color: #f0f2f5; /* Matches app background, sections will be distinct */
             padding: 20px; /* Overall padding for sidebar */
-            /* box-shadow: 1px 0 0px rgba(0, 0, 0, 0.1) inset; */ /* Subtle inner right shadow / border */
             border-right: 1px solid #d1d1d6;
             overflow-y: auto;
             height: 100vh;
             box-sizing: border-box;
         }
+
+        /* Modern Scrollbar for WebKit browsers (Chrome, Safari, Edge) */
+        #sidebar::-webkit-scrollbar {
+            width: 6px; /* Narrower scrollbar */
+        }
+        #sidebar::-webkit-scrollbar-track {
+            background: transparent; /* Make track invisible or match sidebar bg */
+            border-radius: 3px;
+        }
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #c1c1c7; /* Subtle grey, Apple-like */
+            border-radius: 3px;
+        }
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: #a8a8ae; /* Darker on hover */
+        }
+
 
         #sidebar h2 { /* Main Title "Haversine" */
             margin-top: 0;
@@ -85,7 +101,6 @@
         #controls-section label /* Apply to labels inside controls-section */
         {
             margin-right: 10px; /* Spacing between radio/checkbox options */
-            /* margin-bottom: 8px; */ /* Spacing if they wrap - use block for better stack */
             display: inline-flex; /* Use inline-flex for items on same line like radios */
             align-items: center;
             font-size: 0.95em;
@@ -129,7 +144,6 @@
 
 
         #instructions {
-            /* Already styled as a section */
             color: #333333; /* Standard text color */
             font-size: 0.9em;
             line-height: 1.5;
@@ -172,7 +186,7 @@
 
         /* Styling for list items in BOTH lists */
         #location-list li, #station-list li {
-            padding: 11px 14px; /* Generous padding for touch */
+            padding: 11px 14px 11px 38px; /* Adjusted left padding for icon */
             cursor: pointer;
             border-bottom: none; /* Removed individual borders */
             transition: background-color 0.15s ease, color 0.15s ease;
@@ -180,7 +194,29 @@
             color: #1d1d1f;
             border-radius: 7px; /* Rounded list items */
             margin-bottom: 4px; /* Space between items */
+            position: relative; /* For icon positioning */
         }
+
+        /* Styling for icons using ::before pseudo-element */
+        #location-list li::before,
+        #station-list li::before {
+            position: absolute;
+            left: 12px; /* Position icon within the padding area */
+            top: 50%;
+            transform: translateY(-50%); /* Vertically center icon */
+            font-size: 1.1em; /* Adjust icon size as needed */
+            color: #8e8e93; /* Default icon color (slightly muted) */
+            transition: color 0.15s ease; /* Smooth color transition for icon */
+        }
+
+        #location-list li.location-item::before {
+            content: '📍'; /* Round Pushpin emoji */
+        }
+
+        #station-list li.station-item::before {
+            content: '🚉'; /* Station emoji */
+        }
+
 
         /* Ensure last item in EITHER list doesn't have bottom margin */
         #location-list li:last-child, #station-list li:last-child {
@@ -191,22 +227,33 @@
         #location-list li:hover, #station-list li:hover {
             background-color: #f0f2f5; /* Subtle hover, matches sidebar bg */
         }
+        /* Icon color on hover for non-selected items */
+        #location-list li:not([class*="selected-"]):hover::before,
+        #station-list li:not([class*="selected-"]):hover::before {
+            color: #58585d; /* Slightly darker icon on hover */
+        }
+
 
         /* Selection states apply to items in BOTH lists using the data-id attribute */
-        li[data-id].selected-haversine {
+        li[data-id].selected-haversine,
+        li[data-id].selected-directions-start,
+        li[data-id].selected-directions-end {
             background-color: #007aff; /* Apple Blue */
             color: white;
             font-weight: 500;
         }
+        /* Icon color for selected items */
+        li[data-id].selected-haversine::before,
+        li[data-id].selected-directions-start::before,
+        li[data-id].selected-directions-end::before {
+            color: white;
+        }
+
         li[data-id].selected-directions-start {
             background-color: #56a8ff; /* Apple Blue for start */
-            color: white;
-            font-weight: 500;
         }
         li[data-id].selected-directions-end {
             background-color: #67e186; /* Apple Green for end */
-            color: white;
-            font-weight: 500;
         }
 
 
@@ -709,8 +756,12 @@
                          distance: distance,
                          location: otherLoc.location
                      });
-                     // Draw Haversine line
-                     const line = L.polyline([selectedLoc.location, otherLoc.location], { color: '#ff0000', weight: 2.5, opacity: 0.7 }).addTo(map);
+                     // Draw Haversine line with new modern style
+                     const line = L.polyline([selectedLoc.location, otherLoc.location], {
+                         color: '#ff0000', // modern red
+                         weight: 2,
+                         opacity: 0.75,
+                     }).addTo(map);
                      drawnHaversinePolylines.push(line);
                  } else {
                       // Locations NOT matching the filter should have their default popup content
@@ -806,7 +857,7 @@
                     const route = data.features[0];
                     // Use L.geoJSON to draw the route geometry
                     drawnDirectionsRoutePolyline = L.geoJSON(route.geometry, {
-                        style: () => ({ color: "#ff0000", weight: 5, opacity: 0.8 })
+                        style: () => ({ color: "#ff0000", weight: 5, opacity: 0.8 }) // Directions route remains red
                     }).addTo(map);
 
                     const distMeters = route.properties?.summary?.distance || 0;
@@ -1024,11 +1075,13 @@
                 listItem.textContent = loc.title;
                 listItem.setAttribute('data-id', loc.id); // Add data-id attribute for easy lookup
 
-                // Append list item to the correct UL based on location type
+                // Append list item to the correct UL based on location type and add class for icon styling
                 if (isStation(loc)) {
                     stationListEl.appendChild(listItem);
+                    listItem.classList.add('station-item'); // Class for station icon
                 } else {
                     locationListEl.appendChild(listItem); // Append to "Digipunten" list
+                    listItem.classList.add('location-item'); // Class for location icon
                 }
 
                 // Add click event listener to list item
@@ -1043,7 +1096,7 @@
 
             // --- Initial UI Setup ---
             // Set initial state of the 'show all popups' toggle
-            showAllPopupsToggle.checked = showAllPopups; // Should be false initially per comment above? User set it to false, so keeping it false.
+            showAllPopupsToggle.checked = showAllPopups;
              // Set initial state of location filter toggles based on initial variable state
             showOtherLocationsToggle.checked = showOtherLocations; // true
             showStationsToggle.checked = showStations; // false (CHANGED)
@@ -1074,7 +1127,7 @@
             });
 
             // Attach listeners for the filter/visibility toggles
-            showAllPopupsToggle.addEventListener('change', updatePopupVisibility); // Main toggle only affects popup visibility (if marker is visible)
+            // showAllPopupsToggle event listener is already correctly set up above to modify its state variable
             showOtherLocationsToggle.addEventListener('change', handleLocationFilterChange); // Filter toggles affect filter state, marker/popup visibility, and Haversine display
             showStationsToggle.addEventListener('change', handleLocationFilterChange);
 
