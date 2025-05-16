@@ -214,7 +214,7 @@
         }
 
         #station-list li.station-item::before {
-            content: '🚉'; /* Station emoji */
+            content: '🚂'; /* Locomotive emoji */
         }
 
 
@@ -225,12 +225,12 @@
 
         /* Hover state for items in BOTH lists */
         #location-list li:hover, #station-list li:hover {
-            background-color: #f0f2f5; /* Subtle hover, matches sidebar bg */
+            background-color: #2f90f9; /* Subtle hover, matches sidebar bg */
         }
         /* Icon color on hover for non-selected items */
         #location-list li:not([class*="selected-"]):hover::before,
         #station-list li:not([class*="selected-"]):hover::before {
-            color: #58585d; /* Slightly darker icon on hover */
+            color: #2289f7; /* Slightly darker icon on hover */
         }
 
 
@@ -238,7 +238,7 @@
         li[data-id].selected-haversine,
         li[data-id].selected-directions-start,
         li[data-id].selected-directions-end {
-            background-color: #007aff; /* Apple Blue */
+            background-color: #56a8ff; /* Apple Blue */
             color: white;
             font-weight: 500;
         }
