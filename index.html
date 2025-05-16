@@ -1,20 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>HVRSN - I Hate Spreadsheets</title> <!-- Titel vertaald -->
+    <title>HVRSN - I Hate Spreadsheets</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""/>
-    <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin="anonymous"></script>
-    <!-- Polyline decoding library - Included for completeness, though GeoJSON endpoint handles geometry directly -->
-    <!-- <script src="https://unpkg.com/@mapbox/polyline@1.1.1/src/polyline.js"></script> -->
-
 
     <style>
         html, body {
@@ -40,26 +35,15 @@
             overflow-y: auto;
             height: 100vh;
             box-sizing: border-box;
+            position: relative; /* Added for positioning children absolutely */
         }
 
-        /* Modern Scrollbar for WebKit browsers (Chrome, Safari, Edge) */
-        #sidebar::-webkit-scrollbar {
-            width: 6px; /* Narrower scrollbar */
-        }
-        #sidebar::-webkit-scrollbar-track {
-            background: transparent; /* Make track invisible or match sidebar bg */
-            border-radius: 3px;
-        }
-        #sidebar::-webkit-scrollbar-thumb {
-            background: #c1c1c7; /* Subtle grey, Apple-like */
-            border-radius: 3px;
-        }
-        #sidebar::-webkit-scrollbar-thumb:hover {
-            background: #a8a8ae; /* Darker on hover */
-        }
+        #sidebar::-webkit-scrollbar { width: 6px; }
+        #sidebar::-webkit-scrollbar-track { background: transparent; border-radius: 3px; }
+        #sidebar::-webkit-scrollbar-thumb { background: #c1c1c7; border-radius: 3px; }
+        #sidebar::-webkit-scrollbar-thumb:hover { background: #a8a8ae; }
 
-
-        #sidebar h2 { /* Main Title "Haversine" */
+        #sidebar h2 {
             margin-top: 0;
             margin-bottom: 20px;
             color: #1d1d1f;
@@ -67,95 +51,172 @@
             font-weight: 600;
         }
 
-        /* Common style for sidebar sections */
-        .sidebar-section {
-            background-color: #ffffff;
-            padding: 18px;
-            border-radius: 10px;
-            margin-bottom: 18px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.04);
+        /* Instructions Toggle Button */
+        #toggle-instructions-btn {
+            position: absolute;
+            top: 22px; /* Align with H2 title */
+            right: 20px; /* Respect sidebar padding */
+            font-size: 1.6em; /* Icon size */
+            cursor: pointer;
+            color: #6e6e73;
+            z-index: 10;
+            transition: color 0.2s;
+            line-height: 1; /* Ensure consistent vertical alignment */
+        }
+        #toggle-instructions-btn:hover {
+            color: #007aff;
         }
 
-        #mode-selector,
-        #controls-section, /* Combined section for all toggles */
-        #profile-selector,
-        #instructions,
-        #location-list-container, /* Container for standard locations */
-        #station-list-container /* Container for station locations */
-        {
-            /* Apply common section styling */
-            background-color: #ffffff;
-            padding: 18px 20px; /* Slightly more horizontal padding */
+
+        .sidebar-section {
+            background-color: #ffffff; /* Default white background for sections */
+            padding: 18px 20px;
             border-radius: 10px;
             margin-bottom: 18px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
         }
 
-         #profile-selector {
-             display: none; /* Hidden by default, shown when mode is 'directions' */
-         }
+        #mode-selector,
+        #search-section,
+        #controls-section,
+        #profile-selector,
+        #location-list-container,
+        #external-partner-list-container,
+        #station-list-container
+         {
+            /* Common section styling applied */
+        }
 
-        /* Styling for labels and inputs within sections */
+        /* Instructions section - specific styling */
+        #instructions {
+            color: #333333;
+            font-size: 0.9em;
+            line-height: 1.5;
+            display: none; /* Initially hidden */
+            background-color: #eef7ff; /* Light blue background */
+            /* Inherits padding, border-radius, margin, box-shadow from .sidebar-section */
+        }
+        #instructions p { margin-top: 0; margin-bottom: 8px; }
+        #instructions p:last-child { margin-bottom: 0; }
+
+
+        #profile-selector { display: none; }
+
         #mode-selector label,
         #profile-selector label,
-        #controls-section label /* Apply to labels inside controls-section */
-        {
-            margin-right: 10px; /* Spacing between radio/checkbox options */
-            display: inline-flex; /* Use inline-flex for items on same line like radios */
+        #controls-section label {
+            margin-right: 10px;
+            display: inline-flex;
             align-items: center;
             font-size: 0.95em;
             color: #333333;
             cursor: pointer;
-            position: relative; /* For custom styling if ever needed */
+            position: relative;
         }
 
-        /* Specific styling for labels in the controls section to make them stack */
-        #controls-section label {
-            display: block; /* Make labels block elements to stack */
-            margin-bottom: 10px; /* Add space below each toggle label */
-        }
-         #controls-section label:last-child {
-             margin-bottom: 0; /* No bottom margin for the last toggle label */
-         }
-
+        #controls-section label { display: block; margin-bottom: 10px; }
+        #controls-section label:last-child { margin-bottom: 0; }
 
         #mode-selector input[type="radio"],
         #profile-selector input[type="radio"],
         #controls-section input[type="checkbox"] {
             margin-right: 8px;
-            accent-color: #007aff; /* Apple blue */
-            transform: scale(1.1); /* Slightly larger */
+            accent-color: #007aff;
+            transform: scale(1.1);
             cursor: pointer;
         }
 
+        #search-section h3,
         #profile-selector h3,
-        #location-list-container h3, /* New heading for standard locations */
-        #station-list-container h3, /* New heading for stations */
-        #controls-section h3 /* Heading for the controls section */
-         {
+        #location-list-container h3,
+        #external-partner-list-container h3,
+        #station-list-container h3,
+        #controls-section h3 {
             margin-top: 0;
             margin-bottom: 12px;
             font-size: 0.85em;
             font-weight: 600;
-            color: #6e6e73; /* Apple secondary text */
+            color: #6e6e73;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-
-        #instructions {
-            color: #333333; /* Standard text color */
+        /* Search Input, Results, and Map Click Button Styling */
+        #search-input {
+            width: 100%;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            border: 1px solid #d1d1d6;
+            border-radius: 7px;
+            box-sizing: border-box;
+            font-size: 0.95em;
+            background-color: #f9f9f9; /* Slightly different from section bg for inputs */
+            color: #1d1d1f;
+        }
+        #search-input:focus {
+            border-color: #007aff;
+            outline: none;
+            background-color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+        }
+        #search-results-container {
+            max-height: 180px; /* Limit height of results */
+            overflow-y: auto;
+            border-radius: 7px;
+            /* border: 1px solid #e1e1e6; /* Optional: if you want a border always */
+            background-color: #ffffff; /* Match section bg */
+        }
+        #search-results-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        #search-results-list li {
+            padding: 10px 14px;
+            cursor: pointer;
             font-size: 0.9em;
-            line-height: 1.5;
+            color: #1d1d1f;
+            border-bottom: 1px solid #f0f2f5; /* Subtle separator */
+            transition: background-color 0.15s ease;
         }
-        #instructions p {
-            margin-top: 0;
-            margin-bottom: 8px;
+        #search-results-list li:last-child { border-bottom: none; }
+        #search-results-list li:hover { background-color: #e9e9f0; } /* Subtle hover */
+
+        /* Style for the map click button */
+        .map-click-button {
+            width: 100%;
+            box-sizing: border-box; /* Include padding and border in element's total width and height */
+            padding: 10px 12px;
+            margin-top: 10px; /* Add some space above it */
+            border: 1px solid #007aff;
+            border-radius: 7px;
+            background-color: #f0f2f5; /* Similar to sidebar bg */
+            color: #007aff;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+            text-align: center;
         }
-        #instructions p:last-child {
-            margin-bottom: 0;
+        .map-click-button:hover {
+            background-color: #e9f5ff; /* Lighter blue on hover */
+            border-color: #005bb5;
+        }
+        .map-click-button.active {
+            background-color: #007aff;
+            color: white;
+            border-color: #005bb5;
+        }
+        .map-click-button.active:hover {
+            background-color: #005bb5;
         }
 
+
+        /* Scrollbar for search results (WebKit) */
+        #search-results-container::-webkit-scrollbar { width: 5px; }
+        #search-results-container::-webkit-scrollbar-track { background: transparent; }
+        #search-results-container::-webkit-scrollbar-thumb { background: #c1c1c7; border-radius: 3px;}
+        #search-results-container::-webkit-scrollbar-thumb:hover { background: #a8a8ae; }
 
         #reset-selection {
             display: block;
@@ -173,287 +234,201 @@
             transition: background-color 0.2s ease;
             text-align: center;
         }
-        #reset-selection:hover {
-            background-color: #005bb5;
-        }
+        #reset-selection:hover { background-color: #005bb5; }
 
-        /* Styling for BOTH location lists */
-        #location-list, #station-list {
-            list-style-type: none;
-            padding: 0px; /* Remove padding inside ul */
-            margin: 0; /* Remove default ul margin */
-        }
-
-        /* Styling for list items in BOTH lists */
-        #location-list li, #station-list li {
-            padding: 11px 14px 11px 38px; /* Adjusted left padding for icon */
+        /* Combined list styling for all types */
+        #location-list, #external-partner-list, #station-list { list-style-type: none; padding: 0px; margin: 0; }
+        #location-list li, #external-partner-list li, #station-list li {
+            padding: 11px 14px 11px 38px;
             cursor: pointer;
-            border-bottom: none; /* Removed individual borders */
             transition: background-color 0.15s ease, color 0.15s ease;
             font-size: 0.95em;
             color: #1d1d1f;
-            border-radius: 7px; /* Rounded list items */
-            margin-bottom: 4px; /* Space between items */
-            position: relative; /* For icon positioning */
+            border-radius: 7px;
+            margin-bottom: 4px;
+            position: relative;
         }
-
-        /* Styling for icons using ::before pseudo-element */
         #location-list li::before,
+        #external-partner-list li::before,
         #station-list li::before {
             position: absolute;
-            left: 12px; /* Position icon within the padding area */
+            left: 12px;
             top: 50%;
-            transform: translateY(-50%); /* Vertically center icon */
-            font-size: 1.1em; /* Adjust icon size as needed */
-            color: #8e8e93; /* Default icon color (slightly muted) */
-            transition: color 0.15s ease; /* Smooth color transition for icon */
+            transform: translateY(-50%);
+            font-size: 1.1em;
+            color: #8e8e93;
+            transition: color 0.15s ease;
         }
+        /* Icons for each type (in the list) */
+        #location-list li.location-item::before { content: '📍'; }
+        #external-partner-list li.location-item::before { content: '📌'; }
+        #station-list li.station-item::before { content: '🚂'; }
 
-        #location-list li.location-item::before {
-            content: '📍'; /* Round Pushpin emoji */
-        }
+        #location-list li:last-child,
+        #external-partner-list li:last-child,
+        #station-list li:last-child { margin-bottom: 0; }
 
-        #station-list li.station-item::before {
-            content: '🚂'; /* Locomotive emoji */
-        }
+        #location-list li:hover,
+        #external-partner-list li:hover,
+        #station-list li:hover { background-color: #e9e9f0; }
 
-
-        /* Ensure last item in EITHER list doesn't have bottom margin */
-        #location-list li:last-child, #station-list li:last-child {
-            margin-bottom: 0;
-        }
-
-        /* Hover state for items in BOTH lists */
-        #location-list li:hover, #station-list li:hover {
-            background-color: #2f90f9; /* Subtle hover, matches sidebar bg */
-        }
-        /* Icon color on hover for non-selected items */
         #location-list li:not([class*="selected-"]):hover::before,
-        #station-list li:not([class*="selected-"]):hover::before {
-            color: #2289f7; /* Slightly darker icon on hover */
-        }
+        #external-partner-list li:not([class*="selected-"]):hover::before,
+        #station-list li:not([class*="selected-"]):hover::before { color: #2289f7; }
 
 
-        /* Selection states apply to items in BOTH lists using the data-id attribute */
+        /* Selection styling */
         li[data-id].selected-haversine,
         li[data-id].selected-directions-start,
-        li[data-id].selected-directions-end {
-            background-color: #56a8ff; /* Apple Blue */
-            color: white;
-            font-weight: 500;
-        }
-        /* Icon color for selected items */
+        li[data-id].selected-directions-end { color: white; font-weight: 500; }
         li[data-id].selected-haversine::before,
         li[data-id].selected-directions-start::before,
-        li[data-id].selected-directions-end::before {
-            color: white;
-        }
-
-        li[data-id].selected-directions-start {
-            background-color: #56a8ff; /* Apple Blue for start */
-        }
-        li[data-id].selected-directions-end {
-            background-color: #67e186; /* Apple Green for end */
-        }
+        li[data-id].selected-directions-end::before { color: white; }
+        li[data-id].selected-haversine { background-color: #56a8ff; }
+        li[data-id].selected-directions-start { background-color: #56a8ff; }
+        li[data-id].selected-directions-end { background-color: #67e186; }
 
 
-        #map-container {
-            flex-grow: 1;
-            height: 100vh;
-        }
+        #map-container { flex-grow: 1; height: 100vh; }
 
         .info-panel {
-            margin-top: 0; /* Handled by section margin-bottom */
-            margin-bottom: 18px; /* If it's the last one, this could be removed via :last-child */
-            padding: 18px 20px;
-            border-top: none; /* Removed, using section style */
-            display: none; /* Initially hidden */
-            background-color: #ffffff;
-            border-radius: 10px;
+            margin-bottom: 18px; padding: 18px 20px; display: none;
+            background-color: #ffffff; border-radius: 10px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
         }
-        #sidebar > .info-panel:last-of-type { /* If an info panel is the true last item in sidebar */
-             margin-bottom: 0;
-        }
+        #sidebar > .info-panel:last-of-type { margin-bottom: 0; }
+        .info-panel h3 { font-size: 1.0em; font-weight: 600; color: #1d1d1f; margin-top: 0; margin-bottom: 15px; }
+        .info-panel ul, .info-panel div { font-size: 0.92em; list-style-type: none; padding: 0; color: #333333; }
+        .info-panel li { padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
+        .info-panel li:last-child { border-bottom: none; }
+        .info-panel .error-message, .info-panel .loading-message { font-style: normal; padding: 5px 0; }
+        .info-panel .error-message { color: #ff3b30; font-weight: 500; }
+        .info-panel .loading-message { color: #555555; }
+        #selected-location-name-haversine { font-weight: 600; color: #007aff; }
+        #selected-location-name-directions-start { font-weight: 600; color: #4da1fa; }
+        #selected-location-name-directions-end { font-weight: 600; color: #55c671; }
 
-
-        .info-panel h3 {
-            font-size: 1.0em;
-            font-weight: 600;
-            color: #1d1d1f;
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        .info-panel ul, .info-panel div {
-            font-size: 0.92em;
-            list-style-type: none;
-            padding: 0;
-            color: #333333;
-        }
-        .info-panel li {
-            padding: 6px 0;
-            border-bottom: 1px solid #f0f2f5; /* Very subtle dashed border */
-        }
-        .info-panel li:last-child {
-            border-bottom: none;
-        }
-        .info-panel .error-message, .info-panel .loading-message {
-            font-style: normal;
-            padding: 5px 0;
-        }
-        .info-panel .error-message {
-            color: #ff3b30; /* Apple Red */
-            font-weight: 500;
-        }
-        .info-panel .loading-message {
-            color: #555555;
-        }
-         #selected-location-name-haversine {
-             font-weight: 600;
-             color: #007aff;
-         }
-        #selected-location-name-directions-start, #selected-location-name-directions-end {
-            font-weight: 600;
-        }
-         #selected-location-name-directions-start { color: #4da1fa; }
-         #selected-location-name-directions-end { color: #55c671; }
-
-
-         /* Custom Popup Styling */
         .custom-popup .leaflet-popup-content-wrapper {
-            background: #ffffff;
-            border-radius: 12px; /* iOS like rounded corners */
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); /* Softer, more prominent shadow */
-            padding: 0; /* Remove padding, content will handle it */
-            border: 0.5px solid rgba(0,0,0,0.08); /* Very subtle border */
+            background: #ffffff; border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            padding: 0; border: 0.5px solid rgba(0,0,0,0.08);
         }
-
         .custom-popup .leaflet-popup-content {
-            margin: 0; /* Reset margin */
-            padding: 9px 12px; /* Padding inside the content area */
-            font-size: 13.5px;
-            line-height: 1.5;
-            color: #1d1d1f; /* Dark text */
-            max-height: 70px; /* Increased max-height */
-            overflow-y: auto; /* Scrollbar if content exceeds max-height */
-            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            margin: 0; padding: 9px 12px; font-size: 13.5px; line-height: 1.5; color: #1d1d1f;
+            max-height: 80px; /* Increased slightly */ overflow-y: auto; -webkit-overflow-scrolling: touch;
         }
-        .custom-popup .leaflet-popup-content b {
-            font-weight: 600;
-            color: #000000; /* Pure black for titles in popup */
-        }
-        .custom-popup .leaflet-popup-content br {
-            display: block; /* Make <br> create more space */
-            margin-bottom: 3px;
-        }
-
-        .custom-popup .leaflet-popup-tip-container {
-            /* Tip styling can be complex, this ensures it matches background */
-        }
-        .custom-popup .leaflet-popup-tip {
-             background: #ffffff;
-             border: 0.5px solid rgba(0,0,0,0.08);
-             box-shadow: none; /* Remove default tip shadow if wrapper has a good one */
-        }
-
-
+        .custom-popup .leaflet-popup-content b { font-weight: 600; color: #000000; }
+        .custom-popup .leaflet-popup-content br { display: block; margin-bottom: 3px; }
+        .custom-popup .leaflet-popup-tip { background: #ffffff; border: 0.5px solid rgba(0,0,0,0.08); box-shadow: none; }
         .custom-popup a.leaflet-popup-close-button {
-            position: absolute;
-            top: 8px; /* Adjust for better alignment */
-            right: 10px;
-            padding: 0;
-            width: 24px;
-            height: 24px;
-            font-size: 22px; /* Slightly larger 'x' */
-            line-height: 24px;
-            color: #b0b0b5; /* Lighter close button color */
-            text-align: center;
-            text-decoration: none;
-            font-weight: normal; /* Normal weight for modern 'x' */
-            background: transparent;
-            border-radius: 50%; /* Circular hit area */
-            transition: color 0.2s ease, background-color 0.2s ease;
+            position: absolute; top: 8px; right: 10px; padding: 0; width: 24px; height: 24px;
+            font-size: 22px; line-height: 24px; color: #b0b0b5; text-align: center;
+            text-decoration: none; font-weight: normal; background: transparent;
+            border-radius: 50%; transition: color 0.2s ease, background-color 0.2s ease;
         }
-        .custom-popup a.leaflet-popup-close-button:hover {
-            color: #1d1d1f; /* Darker on hover */
-            background-color: rgba(0,0,0,0.05); /* Subtle hover background */
+        .custom-popup a.leaflet-popup-close-button:hover { color: #1d1d1f; background-color: rgba(0,0,0,0.05); }
+
+        /* --- CSS for Emoji/Div Icons on Map (Larger) --- */
+        /* Base style for DivIcons */
+        .leaflet-div-icon {
+             background: none; /* No background */
+             border: none; /* No border */
         }
 
-        /* Custom marker style for stations (Orange dot) */
-         .station-marker {
-             background-color: #ff8800; /* Orange */
-             width: 10px;
-             height: 10px;
-             border-radius: 50%;
-             border: 1px solid rgba(0,0,0,0.2);
-         }
-         /* Removed .default-marker CSS */
+        /* Style for the Station emoji marker */
+        .station-emoji-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px; /* <-- Increased emoji size */
+            text-shadow: 0 0 3px rgba(0,0,0,0.3); /* Optional: add slightly larger shadow for visibility */
+            width: 36px !important; /* <-- Increased div size to match iconSize in JS */
+            height: 36px !important; /* <-- Increased div size to match iconSize in JS */
+        }
+
+         /* Style for the External Partner emoji marker */
+        .external-partner-emoji-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px; /* <-- Increased emoji size */
+            text-shadow: 0 0 3px rgba(0,0,0,0.3); /* Optional: add slightly larger shadow for visibility */
+             width: 36px !important; /* <-- Increased div size to match iconSize in JS */
+            height: 36px !important; /* <-- Increased div size to match iconSize in JS */
+        }
+        /* --- END CSS for Emoji/Div Icons on Map --- */
+
+        /* Digipunten and Searched location markers use Leaflet's default blue icon */
 
     </style>
 </head>
 <body>
     <div id="app-container">
         <div id="sidebar">
-            <h2>Haversine</h2> <!-- Titel -->
+            <span id="toggle-instructions-btn" title="Toon/Verberg Instructies">ℹ️</span>
+            <h2 id="app-title">🧭 Haversine</h2>
 
             <div id="mode-selector" class="sidebar-section">
                 <label><input type="radio" name="mode" value="haversine" checked> Afstanden Tot Alle</label>
                 <label><input type="radio" name="mode" value="directions"> Route Tussen Punten</label>
             </div>
 
-            <!-- Combined section for Controls: Popups & Location Type Filters -->
             <div id="controls-section" class="sidebar-section">
                  <h3>Weergave Opties</h3>
-                 <label>
-                     <input type="checkbox" id="show-all-popups-toggle">
-                     Toon alle locatie data op kaart
-                 </label>
-                 <label>
-                     <input type="checkbox" id="show-other-locations-toggle" checked>
-                     Inclusief alle Digipunten
-                 </label>
-                 <label>
-                     <input type="checkbox" id="show-stations-toggle"> <!-- REMOVED checked attribute -->
-                     Inclusief alle Stations
-                 </label>
+                 <label><input type="checkbox" id="show-all-popups-toggle"> Toon alle locatie data op kaart</label>
+                 <label><input type="checkbox" id="show-digipunten-toggle" checked> Inclusief alle Digipunten</label>
+                 <label><input type="checkbox" id="show-external-partners-toggle"> Inclusief Externe Partners</label> <!-- Default unchecked -->
+                 <label><input type="checkbox" id="show-stations-toggle"> Inclusief alle Treinstations</label>
             </div>
 
-
+            <!-- CORRECTED THIS SECTION -->
             <div id="profile-selector" class="sidebar-section">
                  <h3>Route Type:</h3>
                  <label><input type="radio" name="profile" value="driving-car" checked> Auto</label>
                  <label><input type="radio" name="profile" value="cycling-regular"> Fiets</label>
-                 <label><input type="radio" name="profile" value="foot-walking"> Voetganger</label> <!-- CORRECTED: Added name="profile" and value="foot-walking" -->
+                 <label><input type="radio" name="profile" value="foot-walking"> Voetganger</label>
             </div>
+            <!-- END CORRECTION -->
 
 
-            <div id="instructions" class="sidebar-section">
-                <!-- Instructions will be updated by JS -->
-            </div>
+            <div id="instructions" class="sidebar-section"></div> <!-- This will be toggled -->
 
             <button id="reset-selection">Selectie Herstellen</button>
 
-            <!-- Container for standard locations list -->
+            <!-- Search Section -->
+            <div id="search-section" class="sidebar-section">
+                <h3>Zoek Specifieke Locatie</h3>
+                <input type="text" id="search-input" placeholder="Voer adres, plaatsnaam of halte in...">
+                <div id="search-results-container">
+                    <ul id="search-results-list"></ul>
+                </div>
+                <button id="toggle-map-click-mode" class="map-click-button">Pinpunt Locatie op Kaart</button>
+            </div>
+
+            <!-- Digipunten List -->
             <div id="location-list-container" class="sidebar-section">
                  <h3>Digipunten</h3>
                  <ul id="location-list"></ul>
             </div>
 
-            <!-- Container for train stations list -->
+            <!-- External Partner List Container -->
+            <div id="external-partner-list-container" class="sidebar-section">
+                 <h3>Externe Partners</h3>
+                 <ul id="external-partner-list"></ul>
+            </div>
+
+            <!-- Train Station List -->
             <div id="station-list-container" class="sidebar-section">
-                 <h3>Stations</h3>
+                 <h3>Treinstations</h3>
                  <ul id="station-list"></ul>
             </div>
 
 
-            <!-- Haversine Info Panel -->
-            <div id="haversine-info" class="info-panel"> <!-- Will adopt .info-panel styles -->
+            <div id="haversine-info" class="info-panel">
                 <h3>Afstanden vanaf <span id="selected-location-name-haversine">nvt</span>:</h3>
                 <ul id="haversine-distance-list"></ul>
             </div>
-
-            <!-- Directions Info Panel -->
-            <div id="directions-info" class="info-panel"> <!-- Will adopt .info-panel styles -->
+            <div id="directions-info" class="info-panel">
                 <h3>Route Details (<span id="current-profile-display">Auto</span>):</h3>
                 <div id="directions-route-summary"></div>
             </div>
@@ -463,10 +438,10 @@
 
     <script>
         // --- YOUR OPENROUTESERVICE API KEY ---
-        const ORS_API_KEY = "5b3ce3597851110001cf6248b3f2a09866064cc299ac8aacef0bdfa2"; // Example key - REPLACE THIS!
+        const ORS_API_KEY = "5b3ce3597851110001cf624809966b681b2a4525b72dba6838e2e32e";
         // --- END CONFIGURATION ---
 
-        // Standard locations (renamed Digipunten in UI)
+
         const locations = [
             { id: 'amal', title: 'AMAL', location: { lat: 51.0606253, lng: 3.7319163 } },
             { id: 'bibbrugsepoort', title: 'Wijkbibliotheek Brugse Poort', location: { lat: 51.0625967, lng: 3.6971764 } },
@@ -483,38 +458,41 @@
             { id: 'vlaamsekaai', title: 'Kringwinkel Vlaamse Kaai', location: { lat: 51.044070, lng: 3.741510 } },
             { id: 'wgcsintamandsberg', title: 'WGC Sint-Amandsberg', location: { lat: 51.0521143, lng: 3.74279 } }
         ];
-
-        // Train station locations
         const trainStations = [
             { id: 'stationdampoort', title: 'Station Dampoort', location: { lat: 51.0558422, lng: 3.7404701 } },
             { id: 'stationsintpieters', title: 'Station Gent-Sint-Pieters', location: { lat: 51.0360946, lng: 3.7108049 } }
         ];
+        const externalPartners = [
+             { id: 'dekrook', title: 'Bibliotheek De Krook', location: { lat: 51.049086, lng: 3.7288502 } }
+        ];
 
-        // Combine all locations into a single array for processing
-        const allLocations = [...locations, ...trainStations];
-
+        const allLocations = [...locations, ...externalPartners, ...trainStations];
 
         let map;
-        const mapMarkers = {}; // Object to store Leaflet markers by location ID
-        let drawnHaversinePolylines = []; // Array to store Haversine lines
-        let drawnDirectionsRoutePolyline = null; // Variable for the Directions route line
+        const mapMarkers = {};
+        let drawnHaversinePolylines = [];
+        let drawnDirectionsRoutePolyline = null;
 
-        // App State
         let currentMode = 'haversine';
         let haversineSelectedLocation = null;
         let directionsStartLocation = null;
         let directionsEndLocation = null;
-        let selectedRouteProfile = 'driving-car'; // Default profile
+        let selectedRouteProfile = 'driving-car';
+        let showAllPopups = false;
+        let showDigipunten = true;
+        let showExternalPartners = false;
+        let showStations = false;
 
-        // State variables for visibility/filtering
-        let showAllPopups = false; // Controls showing popups for *filtered* locations when nothing specific is selected
-        let showOtherLocations = true; // Filter toggle state for 'Digipunten' - default ON
-        let showStations = false; // Filter toggle state for 'Stations' - default OFF (CHANGED)
+        let activeSearchedLocation = null;
+        let searchedLocationMarker = null;
+        const GHENT_FOCUS_POINT = { lat: 51.05, lng: 3.71667 };
+
+        let isMapClickModeActive = false;
 
 
-        // DOM Elements
-        const locationListEl = document.getElementById('location-list'); // Standard locations list (Digipunten)
-        const stationListEl = document.getElementById('station-list'); // New station locations list
+        const locationListEl = document.getElementById('location-list');
+        const stationListEl = document.getElementById('station-list');
+        const externalPartnerListEl = document.getElementById('external-partner-list');
         const instructionsEl = document.getElementById('instructions');
         const resetButton = document.getElementById('reset-selection');
         const haversineInfoDiv = document.getElementById('haversine-info');
@@ -526,611 +504,687 @@
         const profileSelectorDiv = document.getElementById('profile-selector');
         const profileRadioButtons = document.querySelectorAll('input[name="profile"]');
         const currentProfileDisplayEl = document.getElementById('current-profile-display');
-
-        // Toggle DOM elements (now inside controls-section)
         const showAllPopupsToggle = document.getElementById('show-all-popups-toggle');
-        const showOtherLocationsToggle = document.getElementById('show-other-locations-toggle');
+        const showDigipuntenToggle = document.getElementById('show-digipunten-toggle');
+        const showExternalPartnersToggle = document.getElementById('show-external-partners-toggle');
         const showStationsToggle = document.getElementById('show-stations-toggle');
 
+        const searchInputEl = document.getElementById('search-input');
+        const searchResultsListEl = document.getElementById('search-results-list');
+        const toggleMapClickModeButton = document.getElementById('toggle-map-click-mode');
+        const toggleInstructionsBtn = document.getElementById('toggle-instructions-btn'); // New button
 
-        // Custom marker icon ONLY for stations (Orange dot)
-        const stationIcon = L.divIcon({
-            className: 'station-marker', // Use CSS class for styling
-            iconSize: [12, 12], // Size includes border
-            popupAnchor: [0, -6] // Adjust to center popup above dot
+        // --- Define Icons ---
+        const digipuntIcon = new L.Icon.Default();
+        const stationEmojiIcon = L.divIcon({
+            className: 'station-emoji-marker', html: '🚂',
+            iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -18]
         });
-        // Removed defaultIcon definition - we'll use L.marker defaults
+        const externalPartnerEmojiIcon = L.divIcon({
+            className: 'external-partner-emoji-marker', html: '📌',
+            iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -18]
+        });
 
 
-        // Haversine distance calculation function
         function toRad(x) { return x * Math.PI / 180; }
-
         function haversineDistance(coords1, coords2) {
-            const R = 6371; // Radius of the earth in km
+            const R = 6371;
             const dLat = toRad(coords2.lat - coords1.lat);
             const dLon = toRad(coords2.lng - coords1.lng);
             const lat1 = toRad(coords1.lat);
             const lat2 = toRad(coords2.lat);
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return R * c; // Distance in km
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
         }
 
-        // --- Filtering Logic ---
-        // Determines if a location is a 'station' based on its ID
-        function isStation(loc) {
-            return loc.id.startsWith('station');
-        }
+        function isStation(loc) { return trainStations.some(s => s.id === loc.id); }
+        function isExternalPartner(loc) { return externalPartners.some(p => p.id === loc.id); }
+        function isDigipunt(loc) { return locations.some(l => l.id === loc.id); }
 
-        // Determines if a location should have a marker shown based on the current filter toggle settings
         function shouldMarkerBeVisible(loc) {
-             const station = isStation(loc);
-             if (station && showStations) return true;
-             if (!station && showOtherLocations) return true;
+             if (loc === activeSearchedLocation) return true;
+             if (isStation(loc)) return showStations;
+             if (isExternalPartner(loc)) return showExternalPartners;
+             if (isDigipunt(loc)) return showDigipunten;
              return false;
         }
 
-         // Updates the visibility of all markers on the map based on filter toggles
-         function updateMarkerVisibility() {
+        function updateMarkerVisibility() {
              allLocations.forEach(loc => {
                  const marker = mapMarkers[loc.id];
                  if (!marker) return;
+                 if (shouldMarkerBeVisible(loc)) { if (!map.hasLayer(marker)) marker.addTo(map); }
+                 else { if (map.hasLayer(marker)) { map.removeLayer(marker); marker.closePopup(); }}
+             });
+             if (activeSearchedLocation && searchedLocationMarker) {
+                  if (!map.hasLayer(searchedLocationMarker)) searchedLocationMarker.addTo(map);
+             } else if (searchedLocationMarker) {
+                  map.removeLayer(searchedLocationMarker); searchedLocationMarker = null;
+             }
+        }
 
-                 if (shouldMarkerBeVisible(loc)) {
-                      // Check if the marker is currently removed, if so, add it back
-                      if (!map.hasLayer(marker)) {
-                          marker.addTo(map);
-                      }
-                 } else {
-                     // Check if the marker is currently added, if so, remove it
-                     if (map.hasLayer(marker)) {
-                         map.removeLayer(marker);
-                          // Close popup if marker is removed
-                          marker.closePopup();
+        function shouldPopupBeOpen(loc) {
+            const isSelected = (loc === haversineSelectedLocation) ||
+                               (loc === directionsStartLocation) ||
+                               (loc === directionsEndLocation);
+            if (loc === activeSearchedLocation) {
+                 // Special handling for the searched location marker
+                 return isSelected && activeSearchedLocation !== null;
+            }
+            // For all other predefined locations
+            return shouldMarkerBeVisible(loc) && (isSelected || showAllPopups);
+        }
+
+
+        function updatePopupVisibility() {
+            map.closePopup(); // Close any globally open popup first
+
+            // Open popups for selected locations
+            [haversineSelectedLocation, directionsStartLocation, directionsEndLocation].forEach(selectedLoc => {
+                 if (selectedLoc) {
+                     const marker = (selectedLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[selectedLoc.id];
+                     if (marker && shouldPopupBeOpen(selectedLoc) && map.hasLayer(marker)) {
+                         marker.openPopup();
                      }
                  }
-             });
-         }
-
-
-        // --- Popup Management ---
-
-        // Decides if a location's popup *should* be open based on ALL state
-        function shouldPopupBeOpen(loc) {
-             const isSelected = (loc === haversineSelectedLocation) ||
-                                (loc === directionsStartLocation) ||
-                                (loc === directionsEndLocation);
-
-             // Popup is open if it's selected OR if 'show all popups' is on AND it matches the type filters
-             // AND the marker is actually visible on the map
-             return shouldMarkerBeVisible(loc) && (isSelected || showAllPopups);
-        }
-
-        // Updates the open/closed state of all popups on the map
-        function updatePopupVisibility() {
-            allLocations.forEach(loc => {
-                const marker = mapMarkers[loc.id];
-                if (!marker) return; // Should not happen if markers were added correctly
-
-                if (shouldPopupBeOpen(loc)) {
-                    // If popup should be open, ensure its content is correct BEFORE opening
-                    // Content is set in displayHaversineDistances or fetchAndDrawORSRoute,
-                    // or reset to default title by resetAllPopupContent or displayHaversineDistances cleanup
-                     if (map.hasLayer(marker)) { // Only open if marker is visible
-                          marker.openPopup();
-                     } else {
-                         // If marker is not visible, ensure popup is closed
-                         marker.closePopup();
-                     }
-                } else {
-                    marker.closePopup();
-                }
             });
-        }
 
-        // Resets all popups to their default content (just the title)
-        function resetAllPopupContent() {
-             allLocations.forEach(loc => {
-                if (mapMarkers[loc.id]) {
-                    mapMarkers[loc.id].setPopupContent(`<b>${loc.title}</b>`);
+            // If showAllPopups is true, open popups for other visible markers
+            if (showAllPopups) {
+                allLocations.forEach(loc => {
+                    const marker = mapMarkers[loc.id];
+                    // Ensure it's not one of the already handled selected locations
+                    const isAlreadySelected = (loc === haversineSelectedLocation) ||
+                                            (loc === directionsStartLocation) ||
+                                            (loc === directionsEndLocation);
+                    if (marker && shouldMarkerBeVisible(loc) && !isAlreadySelected && map.hasLayer(marker)) {
+                         marker.openPopup();
+                    }
+                });
+                // Also for the searched location if it's not a primary selection and showAllPopups is on
+                if (activeSearchedLocation && searchedLocationMarker && map.hasLayer(searchedLocationMarker) &&
+                    activeSearchedLocation !== haversineSelectedLocation &&
+                    activeSearchedLocation !== directionsStartLocation &&
+                    activeSearchedLocation !== directionsEndLocation) {
+                    searchedLocationMarker.openPopup();
                 }
-            });
-        }
-
-        // --- Map Drawing Management ---
-        function clearMapDrawings() {
-            // Remove all Haversine lines
-            drawnHaversinePolylines.forEach(line => map.removeLayer(line));
-            drawnHaversinePolylines = [];
-            // Remove the Directions route line
-            if (drawnDirectionsRoutePolyline) {
-                map.removeLayer(drawnDirectionsRoutePolyline);
-                drawnDirectionsRoutePolyline = null;
             }
         }
 
-        // --- UI State Management ---
+
+        function resetAllPopupContent() {
+             allLocations.forEach(loc => {
+                if (mapMarkers[loc.id]) { mapMarkers[loc.id].setPopupContent(`<b>${loc.title}</b>`); }
+            });
+             if(searchedLocationMarker && activeSearchedLocation) {
+                  searchedLocationMarker.setPopupContent(`<b>${activeSearchedLocation.title}</b>`);
+             }
+        }
+
+        function clearMapDrawings() {
+            drawnHaversinePolylines.forEach(line => map.removeLayer(line));
+            drawnHaversinePolylines = [];
+            if (drawnDirectionsRoutePolyline) { map.removeLayer(drawnDirectionsRoutePolyline); drawnDirectionsRoutePolyline = null; }
+        }
+
         function clearSelectionsAndUI() {
-            // Reset selected locations in state
             haversineSelectedLocation = null;
             directionsStartLocation = null;
             directionsEndLocation = null;
 
-            // Remove selection classes from *all* list items
+            if (searchedLocationMarker) {
+                map.removeLayer(searchedLocationMarker);
+                searchedLocationMarker = null;
+            }
+            activeSearchedLocation = null;
+            searchInputEl.value = '';
+            searchResultsListEl.innerHTML = '';
+
+            if (isMapClickModeActive) {
+                isMapClickModeActive = false;
+                toggleMapClickModeButton.classList.remove('active');
+                toggleMapClickModeButton.textContent = 'Pinpunt Locatie op Kaart';
+                map.getContainer().style.cursor = '';
+            }
+
             document.querySelectorAll('li[data-id]').forEach(item => {
                 item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end');
             });
 
-            // Clear drawings from the map
             clearMapDrawings();
-            // Reset all popup content to just the name
             resetAllPopupContent();
+            haversineInfoDiv.style.display = 'none'; haversineDistanceListEl.innerHTML = ''; selectedLocationNameHaversineEl.textContent = 'nvt';
+            directionsInfoDiv.style.display = 'none'; directionsRouteSummaryEl.innerHTML = ''; currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
 
-            // Hide info panels and clear their content
-            haversineInfoDiv.style.display = 'none';
-            haversineDistanceListEl.innerHTML = '';
-            selectedLocationNameHaversineEl.textContent = 'nvt';
-
-            directionsInfoDiv.style.display = 'none';
-            directionsRouteSummaryEl.innerHTML = '';
-            currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
-
-             // Update popup visibility based on the reset state (no selected locations, filtered view depends on toggle)
-             // Also update marker visibility because clearing selections *might* make a previously selected marker invisible if its type filter is off
-             updateMarkerVisibility();
-             updatePopupVisibility(); // This depends on marker visibility now
-             updateInstructions(); // Reset instructions
+            updateMarkerVisibility();
+            updatePopupVisibility();
+            updateInstructions();
         }
 
         function getProfileDisplayName(profileValue) {
             switch(profileValue) {
                 case 'driving-car': return 'Auto';
                 case 'cycling-regular': return 'Fiets';
-                case 'foot-walking': return 'Voetganger'; // Added walking name
+                case 'foot-walking': return 'Voetganger';
                 default: return profileValue;
             }
         }
 
-        // Update instructions based on current mode and selection state
         function updateInstructions() {
+            let startName = directionsStartLocation ? directionsStartLocation.title : '';
+            let endName = directionsEndLocation ? directionsEndLocation.title : '';
+
             if (currentMode === 'haversine') {
-                instructionsEl.innerHTML = `<p>Selecteer een locatie om de afstanden in rechte lijn tot andere locaties te zien.</p>`;
-                profileSelectorDiv.style.display = 'none'; // Hide profile selector
+                instructionsEl.innerHTML = `<p>Selecteer een locatie uit de lijst, zoek een locatie, of gebruik 'Pinpunt Locatie op Kaart' om afstanden in vogelvlucht te zien.</p>`;
+                profileSelectorDiv.style.display = 'none';
             } else if (currentMode === 'directions') {
-                profileSelectorDiv.style.display = 'block'; // Show profile selector
-                let instructionText = "<p>1. Selecteer een locatie om te selecteren als STARTPUNT.</p>";
+                profileSelectorDiv.style.display = 'block';
+                let instructionText = "<p>1. Selecteer een STARTPUNT (via lijst, zoek, of 'Pinpunt Locatie op Kaart').</p>";
                 if (directionsStartLocation && !directionsEndLocation) {
-                    instructionText += `<p>Geselecteerd Startpunt: <span id="selected-location-name-directions-start">${directionsStartLocation.title}</span></p>`;
-                    instructionText += "<p>2. Selecteer een andere locatie om in te stellen als EINDPUNT.</p>";
+                    instructionText = `<p>Geselecteerd Startpunt: <span id="selected-location-name-directions-start">${startName}</span></p>`;
+                    instructionText += `<p>2. Selecteer een andere locatie (uit de lijst of kaart) als EINDPUNT voor ${getProfileDisplayName(selectedRouteProfile)} route.</p>`;
                 } else if (directionsStartLocation && directionsEndLocation) {
-                     instructionText += `<p>Route van <span id="selected-location-name-directions-start">${directionsStartLocation.title}</span> naar <span id="selected-location-name-directions-end">${directionsEndLocation.title}</span> getoond.</p>`;
-                     instructionText += "<p>Klik op 'Selectie Herstellen' of een nieuwe locatie om een nieuwe route te starten.</p>";
+                     instructionText = `<p>Route van <span id="selected-location-name-directions-start">${startName}</span> naar <span id="selected-location-name-directions-end">${endName}</span> getoond.</p>`;
+                     instructionText += "<p>Klik op 'Selectie Herstellen' of een nieuwe locatie/zoekopdracht om een nieuwe route te starten.</p>";
                 }
                 instructionsEl.innerHTML = instructionText;
             }
         }
 
-        // --- Haversine Logic ---
         function displayHaversineDistances(selectedLoc) {
-            clearMapDrawings(); // Clear any existing lines/routes
-            resetAllPopupContent(); // Start by resetting all popups
-            haversineSelectedLocation = selectedLoc; // Set the selected location for Haversine mode
+            clearMapDrawings();
+            resetAllPopupContent();
 
-            selectedLocationNameHaversineEl.textContent = selectedLoc.title; // Update info panel header
-            haversineDistanceListEl.innerHTML = ''; // Clear previous list items
-            haversineInfoDiv.style.display = 'block'; // Show Haversine info panel
-            directionsInfoDiv.style.display = 'none'; // Hide Directions info panel
+            selectedLocationNameHaversineEl.textContent = selectedLoc.title;
+            haversineDistanceListEl.innerHTML = '';
+            haversineInfoDiv.style.display = 'block';
+            directionsInfoDiv.style.display = 'none';
 
-            // Center map on the selected location (only if its marker is visible)
-             if (mapMarkers[selectedLoc.id] && map.hasLayer(mapMarkers[selectedLoc.id])) {
-                  map.setView(selectedLoc.location, 13);
-             }
+            const markerToFocus = (selectedLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[selectedLoc.id];
 
+            if (markerToFocus && map.hasLayer(markerToFocus)) {
+                 map.setView(selectedLoc.location, map.getZoom() < 13 ? 13 : map.getZoom());
+                 markerToFocus.setPopupContent(`<b>${selectedLoc.title}</b>`).openPopup();
+            } else {
+                 map.setView(selectedLoc.location, map.getZoom() < 13 ? 13 : map.getZoom());
+            }
 
-            const distancesData = []; // Array to store distances for sorting
-
-            // Calculate distances and draw lines to *filtered* other locations
+            const distancesData = [];
             allLocations.forEach(otherLoc => {
-                 // Exclude the selected location itself as a target
-                 if (otherLoc.id === selectedLoc.id) {
-                     // We might update the origin's popup later, but not with distance TO itself here
-                     return;
-                 }
+                 if (selectedLoc.id === otherLoc.id) return;
 
-                 // Only process locations that are enabled by the type filters AND whose markers are currently visible
-                 if (shouldMarkerBeVisible(otherLoc)) {
-                     const marker = mapMarkers[otherLoc.id];
-                     // The marker must exist and be visible to draw a line *to* it
-                     if (!marker || !map.hasLayer(marker)) return;
+                 const isOtherLocVisible = shouldMarkerBeVisible(otherLoc);
+                 const isOtherLocSearched = (otherLoc === activeSearchedLocation);
+
+                 if (isOtherLocVisible || isOtherLocSearched) {
+                     const marker = (otherLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[otherLoc.id];
+                     if (!marker) return;
 
                      const distance = haversineDistance(selectedLoc.location, otherLoc.location);
 
-                     // Update popup for the other location (includes distance)
-                     marker.setPopupContent(`<b>${otherLoc.title}</b><br>Afstand: ${distance.toFixed(2)} km`);
+                      let popupContent = `<b>${otherLoc.title}</b>`;
+                     if (otherLoc === haversineSelectedLocation) popupContent += `<br>Geselecteerd punt`;
+                     else popupContent += `<br>Afstand: ${distance.toFixed(2)} km`;
+                     marker.setPopupContent(popupContent);
 
-                     // Store data for the list
-                     distancesData.push({
-                         id: otherLoc.id,
-                         title: otherLoc.title,
-                         distance: distance,
-                         location: otherLoc.location
-                     });
-                     // Draw Haversine line with new modern style
-                     const line = L.polyline([selectedLoc.location, otherLoc.location], {
-                         color: '#ff0000', // modern red
-                         weight: 2,
-                         opacity: 0.75,
-                     }).addTo(map);
-                     drawnHaversinePolylines.push(line);
-                 } else {
-                      // Locations NOT matching the filter should have their default popup content
-                      // This is handled by resetAllPopupContent at the start.
-                      // Ensure they don't get distance info if they are filtered out.
+                     distancesData.push({ id: otherLoc.id, title: otherLoc.title, distance: distance });
+
+                     if (map.hasLayer(markerToFocus) && map.hasLayer(marker)) {
+                          const line = L.polyline([selectedLoc.location, otherLoc.location], { color: '#ff0000', weight: 2, opacity: 0.75 }).addTo(map);
+                          drawnHaversinePolylines.push(line);
+                     }
                  }
             });
 
-            // Update the selected origin's popup content - it doesn't show distance *from* itself here
-             if (mapMarkers[selectedLoc.id]) {
-                  mapMarkers[selectedLoc.id].setPopupContent(`<b>${selectedLoc.title}</b>`);
-             }
-
-
-            // Sort distances by distance (Ascending)
             distancesData.sort((a, b) => a.distance - b.distance);
-
-
-            // Populate the Haversine distance list
-            // Note: The list only includes distances to locations that are currently visible based on filters.
             distancesData.forEach(data => {
                 const listItem = document.createElement('li');
                 listItem.textContent = `${data.title}: ${data.distance.toFixed(2)} km`;
                 haversineDistanceListEl.appendChild(listItem);
             });
-
-            // Update popup visibility state based on the new state (selection & filters)
             updatePopupVisibility();
         }
 
-        // --- Directions Logic (using OpenRouteService) ---
-        // Note: Directions logic is *not* affected by the showOtherLocations/showStations toggles
-        // as it operates on two specific selected points.
-        async function fetchAndDrawORSRoute(startLoc, endLoc) {
-            clearMapDrawings(); // Clear any existing lines/routes (Haversine or previous Directions)
-            resetAllPopupContent(); // Reset popups before adding route info
 
-            // Show loading message and directions panel
+        async function fetchAndDrawORSRoute(startLoc, endLoc) {
+            clearMapDrawings();
+            resetAllPopupContent();
             directionsRouteSummaryEl.innerHTML = `<p class="loading-message">Route berekenen voor ${getProfileDisplayName(selectedRouteProfile)}...</p>`;
             directionsInfoDiv.style.display = 'block';
             haversineInfoDiv.style.display = 'none';
 
-             // Check for API key validity (basic check)
-             if (!ORS_API_KEY || ORS_API_KEY === "YOUR_ORS_API_KEY_HERE") {
+            if (!ORS_API_KEY || ORS_API_KEY === "YOUR_PASTED_API_KEY_HERE") {
                  directionsRouteSummaryEl.innerHTML = `<p class="error-message">OpenRouteService API Sleutel is niet correct ingesteld. Kan geen routes berekenen.</p>`;
-                 console.error("ORS API Key is not set or is the default placeholder. Please replace 'YOUR_ORS_API_KEY_HERE' with your actual key.");
-                 updatePopupVisibility(); // Update popups even on error
-                 return; // Stop execution if key is invalid
-             }
-              // Warn if using the example key
-             if (ORS_API_KEY === "5b3ce3597851110001cf6248b3f2a09866064cc299ac8aacef0bdfa2") {
-                  console.warn("Using example OpenRouteService API Key. This may have strict rate limits or be disabled. Replace it with your own key for reliable use.");
+                 updatePopupVisibility(); return;
              }
 
-
-            const requestBody = {
-                coordinates: [
-                    [startLoc.location.lng, startLoc.location.lat], // ORS expects [lng, lat]
-                    [endLoc.location.lng, endLoc.location.lat]
-                ]
-            };
-
+            const requestBody = { coordinates: [[startLoc.location.lng, startLoc.location.lat], [endLoc.location.lng, endLoc.location.lat]] };
             try {
                 const apiUrl = `https://api.openrouteservice.org/v2/directions/${selectedRouteProfile}/geojson`;
                 const response = await fetch(apiUrl, {
                     method: 'POST',
-                    headers: {
-                        'Authorization': ORS_API_KEY,
-                        'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
-                        'Content-Type': 'application/json; charset=utf-8'
-                    },
+                    headers: { 'Authorization': ORS_API_KEY, 'Accept': 'application/json, application/geo+json', 'Content-Type': 'application/json; charset=utf-8' },
                     body: JSON.stringify(requestBody)
                 });
-
                 if (!response.ok) {
-                    // Try to parse ORS specific error if available
                     let errorDetails = 'Onbekende fout';
-                     try {
-                         const errorData = await response.json();
-                         errorDetails = errorData.error?.message || JSON.stringify(errorData);
-                         console.error("ORS API Error Data:", errorData); // Log error data
-                     } catch (e) {
-                         // If JSON parsing fails, get the raw text response
-                         errorDetails = await response.text();
-                         console.error("ORS API Error Response (raw):", errorDetails);
-                     }
-                     throw new Error(`ORS API Fout (${response.status}): ${errorDetails}`);
+                    try { const errorData = await response.json(); errorDetails = errorData.error?.message || JSON.stringify(errorData); }
+                    catch (e) { errorDetails = await response.text(); }
+                    throw new Error(`ORS API Fout (${response.status}): ${errorDetails}`);
                 }
-
                 const data = await response.json();
-
                 if (data.features && data.features.length > 0) {
                     const route = data.features[0];
-                    // Use L.geoJSON to draw the route geometry
-                    drawnDirectionsRoutePolyline = L.geoJSON(route.geometry, {
-                        style: () => ({ color: "#ff0000", weight: 5, opacity: 0.8 }) // Directions route remains red
-                    }).addTo(map);
-
+                    drawnDirectionsRoutePolyline = L.geoJSON(route.geometry, { style: () => ({ color: "#ff0000", weight: 5, opacity: 0.8 }) }).addTo(map);
                     const distMeters = route.properties?.summary?.distance || 0;
                     const durSeconds = route.properties?.summary?.duration || 0;
                     const distKm = (distMeters / 1000).toFixed(2);
                     const durMin = (durSeconds / 60).toFixed(1);
-
-                    // Update directions summary panel
                     directionsRouteSummaryEl.innerHTML = `
                         <p><strong>Van:</strong> ${startLoc.title}</p>
                         <p><strong>Naar:</strong> ${endLoc.title}</p>
                         <p><strong>Profiel:</strong> ${getProfileDisplayName(selectedRouteProfile)}</p>
                         <p><strong>Afstand:</strong> ${distKm} km</p>
-                        <p><strong>Geschatte Duur:</strong> ${durMin} min</p>
-                    `;
+                        <p><strong>Geschatte Duur:</strong> ${durMin} min</p>`;
 
-                    // Update popups for start and end locations with route info
-                    if (mapMarkers[startLoc.id]) {
-                        mapMarkers[startLoc.id].setPopupContent(`<b>${startLoc.title} (Start)</b><br>Afstand: ${distKm} km<br>Duur: ${durMin} min`);
-                    }
-                    if (mapMarkers[endLoc.id]) {
-                         mapMarkers[endLoc.id].setPopupContent(`<b>${endLoc.title} (Eind)</b><br>Afstand: ${distKm} km<br>Duur: ${durMin} min`);
-                    }
+                    const startPopupContent = `<b>${startLoc.title} (Start)</b><br>Route: ${distKm} km, ${durMin} min`;
+                    const endPopupContent = `<b>${endLoc.title} (Eind)</b><br>Route: ${distKm} km, ${durMin} min`;
 
-                    // Fit map view to the route bounds
-                    if (drawnDirectionsRoutePolyline.getBounds().isValid()) {
-                        map.fitBounds(drawnDirectionsRoutePolyline.getBounds().pad(0.1)); // Add padding
-                    } else {
-                        // Fallback: just center between start/end if bounds are invalid (e.g., very short route)
-                         const centerLat = (startLoc.location.lat + endLoc.location.lat) / 2;
-                         const centerLng = (startLoc.location.lng + endLoc.location.lng) / 2;
-                         map.setView([centerLat, centerLng], 14); // Adjust zoom as needed
+                    const startMarker = (startLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[startLoc.id];
+                    const endMarker = (endLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[endLoc.id];
+
+                     if (startMarker && map.hasLayer(startMarker)) {
+                          startMarker.setPopupContent(startPopupContent);
+                         if (directionsStartLocation && directionsStartLocation.id === startLoc.id && !showAllPopups) startMarker.openPopup();
+                     }
+                    if (endMarker && map.hasLayer(endMarker)) {
+                        endMarker.setPopupContent(endPopupContent);
+                        if (directionsEndLocation && directionsEndLocation.id === endLoc.id && !showAllPopups) endMarker.openPopup();
                     }
 
 
+                    if (drawnDirectionsRoutePolyline.getBounds().isValid()) map.fitBounds(drawnDirectionsRoutePolyline.getBounds().pad(0.1));
                 } else {
-                    // No route found message
-                    directionsRouteSummaryEl.innerHTML = `<p class="error-message">Geen route gevonden voor ${getProfileDisplayName(selectedRouteProfile)} tussen deze locaties.</p>`;
-                     resetAllPopupContent(); // Reset popups if no route is found
+                    directionsRouteSummaryEl.innerHTML = `<p class="error-message">Geen route gevonden voor ${getProfileDisplayName(selectedRouteProfile)}.</p>`;
                 }
             } catch (error) {
-                 console.error("Fout bij ophalen ORS route:", error);
                  directionsRouteSummaryEl.innerHTML = `<p class="error-message">Route berekening mislukt.<br>${error.message}</p>`;
-                 resetAllPopupContent(); // Reset popups on error
-            } finally {
-                // Ensure popups are updated regardless of success or failure
-                updatePopupVisibility(); // Will open start/end popups if they exist
+            }
+            updatePopupVisibility();
+            updateInstructions(); // Update instructions after route details are set
+        }
+
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        async function fetchPeliasSuggestions(query) {
+            if (query.length < 3) { searchResultsListEl.innerHTML = ''; return; }
+            if (!ORS_API_KEY || ORS_API_KEY === "YOUR_PASTED_API_KEY_HERE") {
+                searchResultsListEl.innerHTML = '<li>API sleutel niet geconfigureerd.</li>'; return;
+            }
+            const peliasUrl = `https://api.openrouteservice.org/geocode/autocomplete?api_key=${ORS_API_KEY}&text=${encodeURIComponent(query)}&focus.point.lon=${GHENT_FOCUS_POINT.lng}&focus.point.lat=${GHENT_FOCUS_POINT.lat}&boundary.country=BE`;
+            try {
+                const response = await fetch(peliasUrl);
+                if (!response.ok) {
+                    let errorDetails = 'Onbekende fout';
+                    try { const errorData = await response.json(); errorDetails = errorData.error?.message || JSON.stringify(errorData); }
+                    catch (e) { errorDetails = await response.text(); }
+                    searchResultsListEl.innerHTML = `<li>Fout bij zoeken: ${errorDetails.substring(0, 100)}...</li>`; return;
+                }
+                const data = await response.json();
+                displayPeliasSuggestions(data.features);
+            } catch (error) {
+                searchResultsListEl.innerHTML = '<li>Zoekopdracht mislukt.</li>';
             }
         }
 
-        // --- Event Handlers ---
+        function displayPeliasSuggestions(features) {
+            searchResultsListEl.innerHTML = '';
+            if (!features || features.length === 0) { searchResultsListEl.innerHTML = '<li>Geen resultaten gevonden.</li>'; return; }
+            features.forEach(feature => {
+                const li = document.createElement('li');
+                li.textContent = feature.properties.label;
+                li.addEventListener('click', () => {
+                     handlePeliasResultClick(feature.properties.label, feature.geometry.coordinates);
+                });
+                searchResultsListEl.appendChild(li);
+            });
+        }
+        const debouncedFetchSuggestions = debounce(fetchPeliasSuggestions, 300);
+
+
+       function processCustomLocationSelection(label, coordinates_lng_lat, source = "search") {
+            searchInputEl.value = label;
+            searchResultsListEl.innerHTML = ''; // Clear suggestions
+
+            // Preserve existing start/end if this is not replacing them explicitly
+            let oldDirectionsStart = directionsStartLocation;
+            let oldDirectionsEnd = directionsEndLocation;
+
+            // Clear previous active searched location and its marker, if any
+            if (searchedLocationMarker) {
+                map.removeLayer(searchedLocationMarker);
+                searchedLocationMarker = null;
+            }
+            activeSearchedLocation = null; // Ensure it's fully cleared before re-assigning
+
+            // Create the new searched location
+            activeSearchedLocation = {
+                id: `custom-${source}-${Date.now()}`,
+                title: label,
+                location: { lat: coordinates_lng_lat[1], lng: coordinates_lng_lat[0] }
+            };
+
+            // Add new marker for the searched location
+            searchedLocationMarker = L.marker(activeSearchedLocation.location, { icon: digipuntIcon })
+                .addTo(map)
+                .bindPopup(`<b>${activeSearchedLocation.title}</b>`, { autoClose: false, className: 'custom-popup' });
+            map.setView(activeSearchedLocation.location, Math.max(map.getZoom(), 15));
+
+            if (currentMode === 'haversine') {
+                // In Haversine mode, a new search/map click *always* becomes the selected location
+                haversineSelectedLocation = activeSearchedLocation;
+                directionsStartLocation = null; // Clear any direction selections
+                directionsEndLocation = null;
+                document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end'));
+                displayHaversineDistances(activeSearchedLocation);
+            } else if (currentMode === 'directions') {
+                // In Directions mode:
+                // If no start OR start is already set AND end is also set (i.e., starting a new route)
+                // then this new search/map click becomes the START point.
+                if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) {
+                    directionsStartLocation = activeSearchedLocation;
+                    directionsEndLocation = null; // Clear end point for new route
+                    clearMapDrawings(); // Clear previous route drawings
+                    document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-directions-start', 'selected-directions-end'));
+                    // If oldDirectionsStart was a list item, its visual selection is now gone.
+                    directionsInfoDiv.style.display = 'block';
+                    directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${activeSearchedLocation.title}</b>.<br>Selecteer Eindpunt uit de lijst of kaart.`;
+                } else if (directionsStartLocation && !directionsEndLocation) {
+                    // If start is set, but no end, this new search/map click becomes the END point.
+                    // (Unless the start point itself was the activeSearchedLocation, in which case it's being replaced as start)
+                    if (directionsStartLocation === oldDirectionsStart && directionsStartLocation !== activeSearchedLocation ) { // Ensure start wasn't the *just cleared* activeSearchedLocation
+                         directionsEndLocation = activeSearchedLocation;
+                         // Style the start from list if it was a list item
+                         if (oldDirectionsStart && oldDirectionsStart !== activeSearchedLocation) { // Check oldDirectionsStart is not the one we just made active
+                             const startLi = document.querySelector(`li[data-id="${oldDirectionsStart.id}"]`);
+                             if (startLi) startLi.classList.add('selected-directions-start');
+                         }
+                         fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+                    } else { // The start point was likely the previous activeSearchedLocation, so new search replaces it.
+                        directionsStartLocation = activeSearchedLocation;
+                        directionsEndLocation = null;
+                        clearMapDrawings();
+                        document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-directions-start', 'selected-directions-end'));
+                        directionsInfoDiv.style.display = 'block';
+                        directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${activeSearchedLocation.title}</b>.<br>Selecteer Eindpunt uit de lijst of kaart.`;
+                    }
+                }
+            }
+            updateInstructions();
+            updatePopupVisibility();
+        }
+
+
+        function handlePeliasResultClick(label, coordinates_lng_lat) {
+            processCustomLocationSelection(label, coordinates_lng_lat, "search");
+        }
+
+        function toggleMapClickSelectionMode() {
+            isMapClickModeActive = !isMapClickModeActive;
+            if (isMapClickModeActive) {
+                toggleMapClickModeButton.classList.add('active');
+                toggleMapClickModeButton.textContent = 'Annuleer Kaartselectie';
+                map.getContainer().style.cursor = 'crosshair';
+                 searchInputEl.value = '';
+                 searchResultsListEl.innerHTML = '';
+            } else {
+                toggleMapClickModeButton.classList.remove('active');
+                toggleMapClickModeButton.textContent = 'Pinpunt Locatie op Kaart';
+                map.getContainer().style.cursor = '';
+            }
+        }
+
         function handleModeChange(event) {
             currentMode = event.target.value;
-            clearSelectionsAndUI(); // Clear everything when mode changes (includes popup & marker update)
-            updateInstructions(); // Update instructions for the new mode
-             // Filters persist across modes, no change needed there immediately
+            clearSelectionsAndUI(); // This also resets the map and popups.
+            updateInstructions();
         }
 
         function handleProfileChange(event) {
             selectedRouteProfile = event.target.value;
-            currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile); // Update profile display in panel
-            // If a route is already selected, re-calculate/draw it with the new profile
+            currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
+            updateInstructions(); // Update instructions which might depend on profile.
+
             if (directionsStartLocation && directionsEndLocation) {
-                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation); // Includes popup update
-            } else {
-                 // If in directions mode but no route yet, update loading/info text
-                 clearMapDrawings(); // Clear any previous attempts
-                 if (directionsStartLocation) {
-                    directionsRouteSummaryEl.innerHTML = `Selecteer Eindpunt voor ${getProfileDisplayName(selectedRouteProfile)} route...`;
-                    directionsInfoDiv.style.display = 'block';
-                 } else {
-                    directionsRouteSummaryEl.innerHTML = ''; // No locations selected yet
-                     directionsInfoDiv.style.display = 'none';
-                 }
-                 // Update popup visibility if needed (e.g. start popup)
-                 updatePopupVisibility();
+                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+            } else if (directionsStartLocation) {
+                directionsInfoDiv.style.display = 'block';
+                directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${directionsStartLocation.title}</b>.<br>Selecteer Eindpunt voor ${getProfileDisplayName(selectedRouteProfile)} route...`;
             }
         }
 
-        // Handler for the main 'Show all popups' toggle
-        showAllPopupsToggle.addEventListener('change', function() {
-            showAllPopups = this.checked;
-            updatePopupVisibility(); // Update popup state based on the new toggle value and filters
-        });
 
-        // Handler for the location type filter toggles
         function handleLocationFilterChange() {
-             showOtherLocations = showOtherLocationsToggle.checked;
-             showStations = showStationsToggle.checked;
-
-             // Update marker visibility based on the new filter states
              updateMarkerVisibility();
-
-             // Update popup visibility based on the new filters (and the main toggle/selection)
-             updatePopupVisibility();
-
-             // If we are in Haversine mode and a location is already selected, re-calculate/display distances
-             // This is needed to update the distance list and lines on the map to only *visible* markers
              if (currentMode === 'haversine' && haversineSelectedLocation) {
-                 displayHaversineDistances(haversineSelectedLocation);
+                  if (haversineSelectedLocation === activeSearchedLocation || shouldMarkerBeVisible(haversineSelectedLocation)) {
+                     displayHaversineDistances(haversineSelectedLocation);
+                  } else {
+                       clearSelectionsAndUI();
+                  }
+             } else if (currentMode === 'directions' && directionsStartLocation && directionsEndLocation) {
+                   const startVisible = (directionsStartLocation === activeSearchedLocation) || shouldMarkerBeVisible(directionsStartLocation);
+                   const endVisible = (directionsEndLocation === activeSearchedLocation) || shouldMarkerBeVisible(directionsEndLocation);
+                  if (startVisible && endVisible) {
+                       fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+                  } else {
+                       clearSelectionsAndUI();
+                  }
              }
-              // Note: These filters do NOT affect Directions mode selection or calculation
-              // A selected start/end point will remain selected in state, but its marker might disappear if filtered.
-              // The route calculation still uses the coordinates from the state.
-              // The UI handles this by clearing selections if a selected marker is clicked while filtered out.
+             else {
+                  updatePopupVisibility();
+             }
         }
 
+       function handleLocationClick(clickedLocData, clickedListItemEl) {
+            document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end'));
 
-        // Main click handler for list items (or markers via simulating list item click)
-        function handleLocationClick(clickedLocData, clickedListItemEl) {
-            // Remove selection classes from *all* list items before adding new ones
-            document.querySelectorAll('li[data-id]').forEach(item => {
-                item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end');
-            });
+            if (isMapClickModeActive) toggleMapClickSelectionMode();
 
-            // --- Haversine Mode Logic ---
+            // If a predefined list item is clicked, and there's an activeSearchedLocation that isn't part of the current selection, clear it.
+            if (clickedListItemEl && activeSearchedLocation) {
+                const isSearchedStart = (directionsStartLocation === activeSearchedLocation);
+                const isSearchedEnd = (directionsEndLocation === activeSearchedLocation);
+                const isSearchedHaversine = (haversineSelectedLocation === activeSearchedLocation);
+
+                if (!isSearchedStart && !isSearchedEnd && !isSearchedHaversine) {
+                    if (searchedLocationMarker) map.removeLayer(searchedLocationMarker);
+                    searchedLocationMarker = null;
+                    activeSearchedLocation = null;
+                    searchInputEl.value = ''; // Clear search input as it's no longer relevant
+                }
+            }
+
+
             if (currentMode === 'haversine') {
-                // If the clicked location is already selected in Haversine mode, clear selection
-                if (haversineSelectedLocation && haversineSelectedLocation.id === clickedLocData.id) {
-                    clearSelectionsAndUI(); // Resets state and UI, calls updatePopupVisibility & updateMarkerVisibility
-                } else {
-                    // Select the clicked location and display Haversine distances
-                    haversineSelectedLocation = clickedLocData;
-                    // Clear any previous directions selection just in case modes were quickly switched
-                    directionsStartLocation = null;
-                    directionsEndLocation = null;
+                const isCurrentlySelected = haversineSelectedLocation && haversineSelectedLocation.id === clickedLocData.id;
+                // Clear previous selections, but preserve activeSearchedLocation if it's the one being clicked
+                let tempActiveSearched = (clickedLocData === activeSearchedLocation) ? activeSearchedLocation : null;
+                let tempSearchedMarker = (clickedLocData === activeSearchedLocation) ? searchedLocationMarker : null;
 
-                    clickedListItemEl.classList.add('selected-haversine'); // Add selection class to list item
-                    // Call displayHaversineDistances which resets popups, calculates, draws lines,
-                    // and updates popup content/visibility for filtered targets and the origin.
+                clearSelectionsAndUI();
+
+                if (tempActiveSearched) { // Restore if it was cleared
+                    activeSearchedLocation = tempActiveSearched;
+                    searchedLocationMarker = tempSearchedMarker; // Marker might need re-adding if map removed it
+                    if (searchedLocationMarker && !map.hasLayer(searchedLocationMarker)) searchedLocationMarker.addTo(map);
+                }
+
+
+                if (!isCurrentlySelected) {
+                    haversineSelectedLocation = clickedLocData;
+                    if (clickedListItemEl) clickedListItemEl.classList.add('selected-haversine');
                     displayHaversineDistances(clickedLocData);
                 }
-            }
-            // --- Directions Mode Logic ---
-            else if (currentMode === 'directions') {
-                // Case 1: No locations selected yet, or route already finished (starting a new route)
+                 // If it was currently selected, clearSelectionsAndUI already handled deselection.
+
+            } else if (currentMode === 'directions') {
                 if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) {
-                    clearSelectionsAndUI(); // Clear previous state (includes popup & marker update)
-                    haversineSelectedLocation = null; // Clear haversine selection if any
+                    // Case 1: No start, or route complete -> Set this as START
+                    let tempActiveSearched = (clickedLocData === activeSearchedLocation) ? activeSearchedLocation : null;
+                    let tempSearchedMarker = (clickedLocData === activeSearchedLocation) ? searchedLocationMarker : null;
+                    clearSelectionsAndUI();
+                     if (tempActiveSearched) {
+                        activeSearchedLocation = tempActiveSearched;
+                        searchedLocationMarker = tempSearchedMarker;
+                        if (searchedLocationMarker && !map.hasLayer(searchedLocationMarker)) searchedLocationMarker.addTo(map);
+                    }
 
                     directionsStartLocation = clickedLocData;
-                    clickedListItemEl.classList.add('selected-directions-start'); // Mark as start
+                    if (clickedListItemEl) clickedListItemEl.classList.add('selected-directions-start');
 
-                     // Only center map if the marker is visible
-                     if (mapMarkers[clickedLocData.id] && map.hasLayer(mapMarkers[clickedLocData.id])) {
-                         map.setView(clickedLocData.location, 14);
-                     }
+                    directionsInfoDiv.style.display = 'block';
+                    directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${clickedLocData.title}</b>.<br>Selecteer Eindpunt voor ${getProfileDisplayName(selectedRouteProfile)} route...`;
+                    const marker = (clickedLocData === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[clickedLocData.id];
+                    if (marker && map.hasLayer(marker)) {
+                         map.setView(clickedLocData.location, 14); marker.openPopup();
+                    }
 
-                    directionsInfoDiv.style.display = 'block'; // Show directions panel
-                    directionsRouteSummaryEl.innerHTML = `Selecteer Eindpunt voor ${getProfileDisplayName(selectedRouteProfile)} route...`;
-
-                    updatePopupVisibility(); // Ensure start popup is open
-
+                } else if (directionsStartLocation && !directionsEndLocation) {
+                    // Case 2: Start is set, need to set END
+                    if (directionsStartLocation.id === clickedLocData.id) {
+                        // Clicked Start again -> Clear everything
+                        clearSelectionsAndUI();
+                    } else {
+                        // Clicked different location -> Set as END
+                        directionsEndLocation = clickedLocData;
+                        if (clickedListItemEl) clickedListItemEl.classList.add('selected-directions-end');
+                        // Re-apply start selection class visually if start was a predefined location
+                        if (directionsStartLocation !== activeSearchedLocation) {
+                             const startLi = document.querySelector(`li[data-id="${directionsStartLocation.id}"]`);
+                             if (startLi) startLi.classList.add('selected-directions-start');
+                        }
+                        fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+                    }
                 }
-                // Case 2: Start location selected, selecting the end location
-                else if (directionsStartLocation && !directionsEndLocation && clickedLocData.id !== directionsStartLocation.id) {
-                    directionsEndLocation = clickedLocData;
-                    clickedListItemEl.classList.add('selected-directions-end'); // Mark as end
-                    // Ensure the start list item is still marked selected
-                    const startLi = document.querySelector(`li[data-id="${directionsStartLocation.id}"]`);
-                    if (startLi) startLi.classList.add('selected-directions-start');
-                    // Fetch and draw the route (unaffected by location type filters), updates popups on success
-                    fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
-
-                }
-                // Case 3: Start location selected, and the clicked location is the same as the start
-                 else if (directionsStartLocation && !directionsEndLocation && clickedLocData.id === directionsStartLocation.id) {
-                     // If the user clicks the start location again, clear it and reset
-                     clearSelectionsAndUI();
-                 }
-                 // Case 4: Start and End are selected, and user clicks the End location again
-                 else if (directionsEndLocation && clickedLocData.id === directionsEndLocation.id) {
-                    // If the user clicks the end location again, clear it and reset
-                    clearSelectionsAndUI();
-                 }
             }
-            // Update instructions after selection changes
             updateInstructions();
-            // Ensure popup visibility is correct after any selection change
-             updatePopupVisibility();
+            updatePopupVisibility();
         }
 
 
-        // --- Initialization ---
         document.addEventListener('DOMContentLoaded', function () {
-            // Initialize the map
-            map = L.map('map-container').setView([51.053, 3.725], 12); // Centered near Ghent, suitable zoom
+            map = L.map('map-container').setView([51.053, 3.725], 12);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> medewerkers & Routing via <a href="https://openrouteservice.org/">OpenRouteService</a>'
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> & Routing via <a href="https://openrouteservice.org/">OpenRouteService</a> & Zoeken via <a href="https://pelias.io/">Pelias</a>'
             }).addTo(map);
 
-            // Sort all locations alphabetically by title before rendering lists
-            // The Haversine distance list will be sorted by distance later.
             allLocations.sort((a, b) => a.title.localeCompare(b.title));
 
-            // Loop through ALL locations to create markers and list items
             allLocations.forEach((loc) => {
                 let marker;
-                // Determine which icon to use (default or station)
-                if (isStation(loc)) {
-                    marker = L.marker(loc.location, { icon: stationIcon }); // Use custom dot icon for stations
-                } else {
-                    marker = L.marker(loc.location); // Use default Leaflet icon for others
-                }
-
-                // Add marker to map but DO NOT add it to the map layer yet.
-                // Visibility will be handled by updateMarkerVisibility based on filters.
-                // Bind popup (same for both types)
-                marker.bindPopup(`<b>${loc.title}</b>`, { autoClose: false, className: 'custom-popup' });
-                mapMarkers[loc.id] = marker; // Store marker in the mapMarkers object
-
-                // Create list item
-                const listItem = document.createElement('li');
+                let listItem = document.createElement('li');
                 listItem.textContent = loc.title;
-                listItem.setAttribute('data-id', loc.id); // Add data-id attribute for easy lookup
+                listItem.setAttribute('data-id', loc.id);
 
-                // Append list item to the correct UL based on location type and add class for icon styling
                 if (isStation(loc)) {
-                    stationListEl.appendChild(listItem);
-                    listItem.classList.add('station-item'); // Class for station icon
-                } else {
-                    locationListEl.appendChild(listItem); // Append to "Digipunten" list
-                    listItem.classList.add('location-item'); // Class for location icon
+                    marker = L.marker(loc.location, { icon: stationEmojiIcon });
+                    stationListEl.appendChild(listItem); listItem.classList.add('station-item');
+                } else if (isExternalPartner(loc)) {
+                     marker = L.marker(loc.location, { icon: externalPartnerEmojiIcon });
+                     externalPartnerListEl.appendChild(listItem); listItem.classList.add('location-item');
+                } else if (isDigipunt(loc)) {
+                    marker = L.marker(loc.location, { icon: digipuntIcon });
+                    locationListEl.appendChild(listItem); listItem.classList.add('location-item');
                 }
 
-                // Add click event listener to list item
-                listItem.addEventListener('click', () => handleLocationClick(loc, listItem));
+                marker.bindPopup(`<b>${loc.title}</b>`, { autoClose: false, className: 'custom-popup' });
+                mapMarkers[loc.id] = marker;
 
-                // Add click event listener to marker to simulate list item click
-                marker.on('click', () => {
-                     const li = document.querySelector(`li[data-id="${loc.id}"]`); // Find the corresponding list item (works for both ULs)
-                     if (li) li.click(); // Trigger the list item's click handler
+                listItem.addEventListener('click', () => handleLocationClick(loc, listItem));
+                marker.on('click', (e) => {
+                     L.DomEvent.stopPropagation(e);
+                     const li = document.querySelector(`li[data-id="${loc.id}"]`);
+                     if (li) {
+                          li.click();
+                     } else if (activeSearchedLocation && activeSearchedLocation.id === loc.id) {
+                         handleLocationClick(activeSearchedLocation, null);
+                     }
                 });
             });
 
-            // --- Initial UI Setup ---
-            // Set initial state of the 'show all popups' toggle
             showAllPopupsToggle.checked = showAllPopups;
-             // Set initial state of location filter toggles based on initial variable state
-            showOtherLocationsToggle.checked = showOtherLocations; // true
-            showStationsToggle.checked = showStations; // false (CHANGED)
-
-
-            // Update instructions based on the default mode
+            showDigipuntenToggle.checked = showDigipunten;
+            showExternalPartnersToggle.checked = showExternalPartners;
+            showStationsToggle.checked = showStations;
             updateInstructions();
-            // Hide profile selector initially (default mode is Haversine)
             profileSelectorDiv.style.display = 'none';
-            // Set the initial text for the current profile display
             currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
 
-            // Initial call to set marker visibility based on default filter states (Digipunten ON, Stations OFF)
             updateMarkerVisibility();
-            // Initial call to update popup visibility based on default state (no selection, filters applied, showAllPopups off -> no popups initially)
-             updatePopupVisibility();
+            updatePopupVisibility();
 
-
-            // --- Attach Event Listeners ---
-            // Re-fetch profileRadioButtons *after* DOM is fully loaded and potentially modified (though in this case, it's static HTML)
-            const profileRadioButtons = document.querySelectorAll('input[name="profile"]'); // Ensure this selector is up-to-date
 
             modeRadioButtons.forEach(radio => radio.addEventListener('change', handleModeChange));
-            profileRadioButtons.forEach(radio => radio.addEventListener('change', handleProfileChange));
-            resetButton.addEventListener('click', () => {
-                clearSelectionsAndUI(); // Clear state and UI on reset button click
-                // updateInstructions(), updateMarkerVisibility(), updatePopupVisibility() are called within clearSelectionsAndUI
+            // Re-fetch profileRadioButtons here as DOM is now fully loaded
+            document.querySelectorAll('input[name="profile"]').forEach(radio => radio.addEventListener('change', handleProfileChange));
+            resetButton.addEventListener('click', clearSelectionsAndUI);
+
+            showDigipuntenToggle.addEventListener('change', function() {
+                 showDigipunten = this.checked; handleLocationFilterChange();
+            });
+            showExternalPartnersToggle.addEventListener('change', function() {
+                 showExternalPartners = this.checked; handleLocationFilterChange();
+            });
+            showStationsToggle.addEventListener('change', function() {
+                 showStations = this.checked; handleLocationFilterChange();
+            });
+            showAllPopupsToggle.addEventListener('change', function() {
+                showAllPopups = this.checked; updatePopupVisibility();
             });
 
-            // Attach listeners for the filter/visibility toggles
-            // showAllPopupsToggle event listener is already correctly set up above to modify its state variable
-            showOtherLocationsToggle.addEventListener('change', handleLocationFilterChange); // Filter toggles affect filter state, marker/popup visibility, and Haversine display
-            showStationsToggle.addEventListener('change', handleLocationFilterChange);
+            toggleMapClickModeButton.addEventListener('click', toggleMapClickSelectionMode);
+            toggleInstructionsBtn.addEventListener('click', function() {
+                if (instructionsEl.style.display === 'none' || instructionsEl.style.display === '') {
+                    instructionsEl.style.display = 'block';
+                } else {
+                    instructionsEl.style.display = 'none';
+                }
+            });
 
+            map.on('click', function(e) {
+                if (isMapClickModeActive) {
+                    const { lat, lng } = e.latlng;
+                    const title = `Kaartselectie (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+                    processCustomLocationSelection(title, [lng, lat], "mapclick");
+                    toggleMapClickSelectionMode();
+                }
+            });
+
+            searchInputEl.addEventListener('input', (event) => {
+                if (isMapClickModeActive && event.target.value.length > 0) {
+                    toggleMapClickSelectionMode();
+                }
+                debouncedFetchSuggestions(event.target.value);
+            });
+             searchInputEl.addEventListener('focus', () => {
+                 if (isMapClickModeActive) toggleMapClickSelectionMode();
+             });
+            searchInputEl.addEventListener('blur', () => {
+                setTimeout(() => {
+                    if (!searchResultsListEl.contains(document.activeElement)) {
+                         searchResultsListEl.innerHTML = '';
+                    }
+                }, 150);
+            });
         });
     </script>
 </body>
