@@ -591,24 +591,28 @@
          }
     ];
 
-    // External partners already have the break property defined directly now
-    // If you had a separate externalPartnerDetailsData, you'd do a similar merge.
-    // For now, the externalPartners array already contains the break property.
-
-
     const allLocations = [...locations, ...externalPartners, ...trainStations];
 
     let map;
-    const mapMarkers = {};
+    const mapMarkers = {}; // For predefined locations
     let drawnHaversinePolylines = [];
     let drawnDirectionsRoutePolyline = null;
     let drawnProximityShape = null;
 
     let currentMode = 'kaartweergave'; // Default mode
+
+    // Data for selected points
     let haversineSelectedLocation = null;
     let directionsStartLocation = null;
     let directionsEndLocation = null;
     let proximityCenterLocation = null;
+
+    // Markers for custom (searched/map-clicked) points when they are "committed"
+    let customHaversineMarker = null;
+    let customDirectionsStartPtMarker = null;
+    let customDirectionsEndPtMarker = null;
+    let customProximityCenterPtMarker = null;
+
 
     let selectedRouteProfile = 'driving-car';
     let showAllPopups = false;
@@ -616,8 +620,8 @@
     let showExternalPartners = false;
     let showStations = false;
 
-    let activeSearchedLocation = null;
-    let searchedLocationMarker = null;
+    let activeSearchedLocation = null; // Data for the current (transient) search/map-click result
+    let searchedLocationMarker = null; // Marker for the current (transient) search/map-click result
     const GHENT_FOCUS_POINT = { lat: 51.05, lng: 3.71667 };
     let isMapClickModeActive = false;
 
@@ -694,139 +698,200 @@
         return R * c;
     }
 
-    function isStation(loc) { return trainStations.some(s => s.id === loc.id); }
-    function isExternalPartner(loc) { return externalPartners.some(p => p.id === loc.id); }
-    function isDigipunt(loc) { return locations.some(l => l.id === loc.id); }
+    function isStation(loc) { return loc && trainStations.some(s => s.id === loc.id); }
+    function isExternalPartner(loc) { return loc && externalPartners.some(p => p.id === loc.id); }
+    function isDigipunt(loc) { return loc && locations.some(l => l.id === loc.id); }
 
 
-    // REVISED getPopupContent function to use the new data structure with 'break' property
     function getPopupContent(loc) {
-        if (currentMode === 'kaartweergave') {
+        if (!loc) return "";
+        if (currentMode === 'kaartweergave' || !loc.id || loc.id.startsWith('custom-')) { // Show details for custom locations in any mode if they are the focus, or for any in kaartweergave
             let imageHtml = '';
-            if (loc.image) { // Check if an image path is provided for this location
+            if (loc.image) {
                 imageHtml = `<img src="${loc.image}" alt="${loc.title}" class="popup-image">`;
             }
 
             let content = `<strong>${loc.title}</strong>`;
             if (loc.address) content += `<br><em>${loc.address}</em>`;
-            content += imageHtml; // Image will be empty string if no image
+            content += imageHtml;
 
-            let hoursContentHtml = ''; // Build the content for the hours-block
-
+            let hoursContentHtml = '';
             if (loc.hours && loc.hours.length > 0) {
                 hoursContentHtml += loc.hours.join('<br>');
             }
-
-            // Add the break line at the end if the 'break' property exists
             if (loc.break && loc.break.start && loc.break.end) {
-                 // Add a visual separator like an <hr> or just an empty line
-                 if (hoursContentHtml) { // Only add separator if there are hours listed above
-                    hoursContentHtml += `<div style="height: 8px;"></div><hr style="border: none; border-top: 1px solid #eee; margin: 8px 0;">`; // Add vertical space and separator
+                 if (hoursContentHtml) {
+                    hoursContentHtml += `<div style="height: 8px;"></div><hr style="border: none; border-top: 1px solid #eee; margin: 8px 0;">`;
                  }
                  hoursContentHtml += `Pauze: van ${loc.break.start} tot ${loc.break.end}`;
             }
 
-            if (hoursContentHtml) { // Only add the hours-block div if there is content (hours or break)
+            if (hoursContentHtml) {
                  content += `<div class="hours-block">${hoursContentHtml}</div>`;
-            } else if (!loc.address && !imageHtml) { // Only if no address, no image, and no hours/break
-                 content += `<br><em style="font-size:0.9em; color:#777;">(Gedetailleerde info niet beschikbaar)</em>`;
+            } else if (!loc.address && !imageHtml && !(loc.hours && loc.hours.length > 0) && !(loc.break && loc.break.start && loc.break.end)) {
+                 // Only add this if absolutely no other detail is present
+                 if (!loc.id || !loc.id.startsWith('custom-')) // Don't show for custom points unless truly empty
+                    content += `<br><em style="font-size:0.9em; color:#777;">(Gedetailleerde info niet beschikbaar)</em>`;
             }
-
             return `<div class="kaartweergave-popup-content">${content}</div>`;
         }
-        // Default content for other modes (will be overridden by specific mode functions)
+        // Default content for other modes (will be overridden by specific mode functions if needed)
         return `<b>${loc.title}</b>`;
+    }
+
+    function getMarkerForLocation(locData) {
+        if (!locData) return null;
+
+        if (locData === haversineSelectedLocation && locData.id.startsWith('custom-')) return customHaversineMarker;
+        if (locData === directionsStartLocation && locData.id.startsWith('custom-')) return customDirectionsStartPtMarker;
+        if (locData === directionsEndLocation && locData.id.startsWith('custom-')) return customDirectionsEndPtMarker;
+        if (locData === proximityCenterLocation && locData.id.startsWith('custom-')) return customProximityCenterPtMarker;
+        if (locData === activeSearchedLocation && locData.id.startsWith('custom-')) return searchedLocationMarker; // Transient search
+
+        return mapMarkers[locData.id] || null; // For predefined locations
     }
 
 
     function shouldMarkerBeVisible(loc) {
-         if (loc === activeSearchedLocation) return true;
+         if (!loc) return false;
+         // Check if it's one of the "committed" custom points or the active transient search
+         if ( (loc === haversineSelectedLocation && customHaversineMarker) ||
+              (loc === directionsStartLocation && customDirectionsStartPtMarker) ||
+              (loc === directionsEndLocation && customDirectionsEndPtMarker) ||
+              (loc === proximityCenterLocation && customProximityCenterPtMarker) ||
+              (loc === activeSearchedLocation && searchedLocationMarker) ) {
+            return true;
+         }
 
          if (currentMode === 'kaartweergave') {
              if (isDigipunt(loc)) return showDigipunten;
              if (isExternalPartner(loc)) return showExternalPartners;
              if (isStation(loc)) return showStations;
-             return false; // If not any of a visible type in this mode or a searched location
+             return false;
          }
-         // Existing logic for other modes (Haversine, Directions, Proximity)
-         // In these modes, visibility depends on the generic toggles, not just kaartweergave specific logic
+         // For other modes, visibility based on generic toggles
          if (isStation(loc)) return showStations;
          if (isExternalPartner(loc)) return showExternalPartners;
          if (isDigipunt(loc)) return showDigipunten;
-         return false; // Should not happen if loc is in allLocations
+         return false;
     }
 
     function updateMarkerVisibility() {
+         // Predefined markers
          allLocations.forEach(loc => {
              const marker = mapMarkers[loc.id];
              if (!marker) return;
              if (shouldMarkerBeVisible(loc)) { if (!map.hasLayer(marker)) marker.addTo(map); }
              else { if (map.hasLayer(marker)) { map.removeLayer(marker); marker.closePopup(); }}
          });
-         if (activeSearchedLocation && searchedLocationMarker) {
-              if (!map.hasLayer(searchedLocationMarker)) searchedLocationMarker.addTo(map);
-         } else if (searchedLocationMarker && !activeSearchedLocation) {
-              map.removeLayer(searchedLocationMarker);
-         }
+
+         // Custom committed markers
+         [customHaversineMarker, customDirectionsStartPtMarker, customDirectionsEndPtMarker, customProximityCenterPtMarker, searchedLocationMarker].forEach(customMarker => {
+             if (customMarker) { // Assumes if marker exists, its corresponding data (e.g. haversineSelectedLocation) makes it visible
+                 if (!map.hasLayer(customMarker)) customMarker.addTo(map);
+             }
+         });
+         // If a custom marker was removed (e.g. customHaversineMarker = null), it won't be added.
+         // The shouldMarkerBeVisible logic handles if the *data* is still active.
+         // This needs to be more precise: only add custom markers if their *data* is active and they should be visible.
+         // The `shouldMarkerBeVisible` function already checks this.
+         // The above loop is redundant if `shouldMarkerBeVisible` is comprehensive.
+         // The main point is: if a marker (predefined or custom) should be visible, add it. Else remove it.
+
+        // Re-check custom markers based on their data objects
+        const customPointsDataAndMarkers = [
+            { data: haversineSelectedLocation, marker: customHaversineMarker },
+            { data: directionsStartLocation, marker: customDirectionsStartPtMarker },
+            { data: directionsEndLocation, marker: customDirectionsEndPtMarker },
+            { data: proximityCenterLocation, marker: customProximityCenterPtMarker },
+            { data: activeSearchedLocation, marker: searchedLocationMarker }
+        ];
+
+        customPointsDataAndMarkers.forEach(item => {
+            if (item.marker && item.data) { // If both marker and its data exist
+                if (shouldMarkerBeVisible(item.data)) {
+                    if (!map.hasLayer(item.marker)) item.marker.addTo(map);
+                } else {
+                    if (map.hasLayer(item.marker)) { map.removeLayer(item.marker); item.marker.closePopup(); }
+                }
+            }
+        });
     }
+
 
     function updatePopupVisibility() {
         const popupsToOpenMarkers = new Set();
+        const allActiveCustomMarkers = [customHaversineMarker, customDirectionsStartPtMarker, customDirectionsEndPtMarker, customProximityCenterPtMarker, searchedLocationMarker].filter(Boolean);
 
         if (currentMode === 'kaartweergave') {
             if (showAllPopups) {
-                allLocations.forEach(loc => { // Iterate all potential locations
+                allLocations.forEach(loc => {
                     const marker = mapMarkers[loc.id];
-                    // Marker must exist, be on map, and be visible according to its type's checkbox for kaartweergave
                     if (marker && map.hasLayer(marker) && shouldMarkerBeVisible(loc)) {
                          popupsToOpenMarkers.add(marker);
                     }
                 });
-                 if (activeSearchedLocation && searchedLocationMarker && map.hasLayer(searchedLocationMarker) && shouldMarkerBeVisible(activeSearchedLocation)) {
-                    popupsToOpenMarkers.add(searchedLocationMarker);
+                // Show popup for active searched location if it exists and is visible
+                if (activeSearchedLocation && searchedLocationMarker && map.hasLayer(searchedLocationMarker) && shouldMarkerBeVisible(activeSearchedLocation)) {
+                     popupsToOpenMarkers.add(searchedLocationMarker);
                 }
+            } else {
+                 // If not showAllPopups, only the specifically clicked/searched item's popup might be open (handled by click handlers)
+                 // Or if a custom search point is active, its popup is usually opened by processCustomLocationSelection
+                 if (activeSearchedLocation && searchedLocationMarker && map.hasLayer(searchedLocationMarker) && shouldMarkerBeVisible(activeSearchedLocation)) {
+                    // If it's open and should be, keep it. This function is more about mass open/close.
+                    // Individual open actions are in click handlers.
+                 }
             }
-            // Single clicks in kaartweergave are handled by handleLocationClick which calls marker.openPopup().
-            // This function (updatePopupVisibility) mainly handles the "showAllPopups" case for kaartweergave
-            // and manages popups for selected items in other modes.
-        } else { // Logic for other modes (Haversine, Directions, Proximity)
+        } else { // Haversine, Directions, Proximity modes
+            // Open popups for selected/active points in these modes
             [haversineSelectedLocation, directionsStartLocation, directionsEndLocation, proximityCenterLocation].filter(Boolean).forEach(selectedLoc => {
-                const marker = (selectedLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[selectedLoc.id];
-                if (marker && map.hasLayer(marker)) {
-                    if (selectedLoc === activeSearchedLocation || shouldMarkerBeVisible(selectedLoc)) {
-                        popupsToOpenMarkers.add(marker);
-                    }
+                const marker = getMarkerForLocation(selectedLoc); // Gets predefined or specific custom marker
+                if (marker && map.hasLayer(marker) && shouldMarkerBeVisible(selectedLoc)) {
+                    popupsToOpenMarkers.add(marker);
                 }
             });
 
-            if (showAllPopups) { // For non-kaartweergave modes
+            if (showAllPopups) { // Also apply showAllPopups to other visible markers
                 allLocations.forEach(loc => {
-                    const marker = mapMarkers[loc.id];
-                    if (marker && map.hasLayer(marker) && shouldMarkerBeVisible(loc)) {
-                        popupsToOpenMarkers.add(marker);
+                    if (mapMarkers[loc.id] && map.hasLayer(mapMarkers[loc.id]) && shouldMarkerBeVisible(loc)) {
+                        popupsToOpenMarkers.add(mapMarkers[loc.id]);
                     }
                 });
-                if (activeSearchedLocation && searchedLocationMarker && map.hasLayer(searchedLocationMarker) && shouldMarkerBeVisible(activeSearchedLocation)) {
-                    popupsToOpenMarkers.add(searchedLocationMarker);
-                }
+                // And for any custom markers that are visible but not part of the primary selection (less common)
+                allActiveCustomMarkers.forEach(customMarker => {
+                    // Find data object for this marker to check shouldMarkerBeVisible
+                    let dataForMarker = null;
+                    if (customMarker === customHaversineMarker) dataForMarker = haversineSelectedLocation;
+                    else if (customMarker === customDirectionsStartPtMarker) dataForMarker = directionsStartLocation;
+                    else if (customMarker === customDirectionsEndPtMarker) dataForMarker = directionsEndLocation;
+                    else if (customMarker === customProximityCenterPtMarker) dataForMarker = proximityCenterLocation;
+                    else if (customMarker === searchedLocationMarker) dataForMarker = activeSearchedLocation;
+
+                    if (dataForMarker && map.hasLayer(customMarker) && shouldMarkerBeVisible(dataForMarker)) {
+                        popupsToOpenMarkers.add(customMarker);
+                    }
+                });
             }
         }
 
-
         // Close all popups first (that are not in the popupsToOpenMarkers set)
-        allLocations.forEach(loc => {
+        allLocations.forEach(loc => { // Predefined
             const markerInstance = mapMarkers[loc.id];
             if (markerInstance && markerInstance.isPopupOpen() && !popupsToOpenMarkers.has(markerInstance)) {
                 markerInstance.closePopup();
             }
         });
-        if (searchedLocationMarker && searchedLocationMarker.isPopupOpen() && !popupsToOpenMarkers.has(searchedLocationMarker)) {
-             searchedLocationMarker.closePopup();
-        }
+        allActiveCustomMarkers.forEach(customMarker => { // Custom
+             if (customMarker.isPopupOpen() && !popupsToOpenMarkers.has(customMarker)) {
+                 customMarker.closePopup();
+             }
+        });
+
 
         // Open determined popups
         popupsToOpenMarkers.forEach(markerInstance => {
-            if (map.hasLayer(markerInstance) && !markerInstance.isPopupOpen()) { // Open only if not already open
+            if (map.hasLayer(markerInstance) && !markerInstance.isPopupOpen()) {
                  markerInstance.openPopup();
             }
         });
@@ -834,14 +899,22 @@
 
 
     function resetAllPopupContent() {
-         allLocations.forEach(loc => {
+         allLocations.forEach(loc => { // Predefined markers
             if (mapMarkers[loc.id]) {
                  mapMarkers[loc.id].setPopupContent(getPopupContent(loc));
             }
         });
-         if(searchedLocationMarker && activeSearchedLocation) {
-              searchedLocationMarker.setPopupContent(getPopupContent(activeSearchedLocation));
-         }
+        // Custom markers - their popups are usually set when they are created or when their role changes.
+        // This function is mostly for resetting predefined location popups to their default content for the current mode.
+        [customHaversineMarker, customDirectionsStartPtMarker, customDirectionsEndPtMarker, customProximityCenterPtMarker, searchedLocationMarker].filter(Boolean).forEach(marker => {
+            let locData = null;
+            if (marker === customHaversineMarker) locData = haversineSelectedLocation;
+            else if (marker === customDirectionsStartPtMarker) locData = directionsStartLocation;
+            else if (marker === customDirectionsEndPtMarker) locData = directionsEndLocation;
+            else if (marker === customProximityCenterPtMarker) locData = proximityCenterLocation;
+            else if (marker === searchedLocationMarker) locData = activeSearchedLocation;
+            if (locData) marker.setPopupContent(getPopupContent(locData)); // Update with potentially mode-specific default content
+        });
     }
 
     function clearMapDrawings() {
@@ -866,6 +939,16 @@
         }
     }
 
+    function clearSpecificCustomMarkersAndData() {
+        if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+        if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+        if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+        if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+
+        // Corresponding data needs to be cleared if it points to a custom location that's being removed
+        // This is handled by setting haversineSelectedLocation etc. to null in clearSelectionsAndUI
+    }
+
 
     function clearSelectionsAndUI() {
         haversineSelectedLocation = null;
@@ -873,12 +956,13 @@
         directionsEndLocation = null;
         proximityCenterLocation = null;
 
+        clearSpecificCustomMarkersAndData(); // Clears committed custom markers
 
-        if (searchedLocationMarker) {
+        if (searchedLocationMarker) { // Clears transient search marker
             map.removeLayer(searchedLocationMarker);
             searchedLocationMarker = null;
         }
-        activeSearchedLocation = null;
+        activeSearchedLocation = null; // Clears transient search data
         searchInputEl.value = '';
         searchResultsListEl.innerHTML = '';
 
@@ -894,7 +978,7 @@
         });
 
         clearMapDrawings();
-        resetAllPopupContent(); // This will now set kaartweergave popups if mode is kaartweergave
+        resetAllPopupContent();
 
         haversineInfoDiv.style.display = 'none'; haversineDistanceListEl.innerHTML = ''; selectedLocationNameHaversineEl.textContent = 'nvt';
         directionsInfoDiv.style.display = 'none'; directionsRouteSummaryEl.innerHTML = ''; currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
@@ -921,7 +1005,9 @@
     function updateInstructions() {
         let startName = directionsStartLocation ? directionsStartLocation.title : '';
         let endName = directionsEndLocation ? directionsEndLocation.title : '';
+        let haversineName = haversineSelectedLocation ? haversineSelectedLocation.title : '';
         let proximityCenterName = proximityCenterLocation ? proximityCenterLocation.title : '';
+
 
         if (currentMode === 'kaartweergave') {
             instructionsEl.innerHTML = `<p>Dit is de kaartweergave. Klik op een marker om details te zien: blauwe markers (Digipunten), 📌 (Externe Partners), of 🚂 (Treinstations).</p>
@@ -929,7 +1015,11 @@
                                         <p>Vink "Toon alle locatie data op kaart" aan om de details van alle zichtbare locaties tegelijk in popups te tonen.</p>
                                         <p>Klikken op een item in de lijsten hieronder zal ook de betreffende categorie (en de bijbehorende checkbox) activeren en zichtbaar maken op de kaart.</p>`;
         } else if (currentMode === 'haversine') {
-            instructionsEl.innerHTML = `<p>Selecteer een locatie uit de lijst, zoek een locatie, of gebruik 'Pinpunt Locatie op Kaart' om afstanden in vogelvlucht te zien.</p>`;
+            let instructionText = `<p>Selecteer een locatie uit de lijst, zoek een locatie, of gebruik 'Pinpunt Locatie op Kaart' om afstanden in vogelvlucht te zien.</p>`;
+            if (haversineSelectedLocation) {
+                instructionText = `<p>Afstanden berekend vanaf: <strong style="color: #007aff;">${haversineName}</strong>.</p>` + instructionText;
+            }
+            instructionsEl.innerHTML = instructionText;
         } else if (currentMode === 'directions') {
             let instructionText = "<p>1. Selecteer een STARTPUNT (via lijst, zoek, of 'Pinpunt Locatie op Kaart').</p>";
             if (directionsStartLocation && !directionsEndLocation) {
@@ -951,8 +1041,9 @@
     }
 
     function displayHaversineDistances(selectedLoc) {
+        if (!selectedLoc) return;
         clearMapDrawings();
-        resetAllPopupContent(); // Resets to default (kaartweergave if active, or basic title) then we override
+        // resetAllPopupContent(); // Called by some paths, ensure it's consistent
 
         selectedLocationNameHaversineEl.textContent = selectedLoc.title;
         haversineDistanceListEl.innerHTML = '';
@@ -960,35 +1051,30 @@
         directionsInfoDiv.style.display = 'none';
         proximityInfoDiv.style.display = 'none';
 
-        const markerToFocus = (selectedLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[selectedLoc.id];
+        const markerToFocus = getMarkerForLocation(selectedLoc);
 
         if (markerToFocus && map.hasLayer(markerToFocus)) {
              map.setView(selectedLoc.location, map.getZoom() < 13 ? 13 : map.getZoom());
-        } else {
+             markerToFocus.setPopupContent(`<b>${selectedLoc.title}</b><br>(STARTPUNT AFSTANDEN)`).openPopup();
+        } else if (selectedLoc.location) { // Fallback if marker somehow not ready
              map.setView(selectedLoc.location, map.getZoom() < 13 ? 13 : map.getZoom());
         }
 
+
         const distancesData = [];
-        allLocations.forEach(otherLoc => {
-             if (selectedLoc.id === otherLoc.id) return;
+        allLocations.forEach(otherLoc => { // Compare with predefined locations
+             if (selectedLoc.id === otherLoc.id || !mapMarkers[otherLoc.id]) return;
              if (shouldMarkerBeVisible(otherLoc)) {
-                 const marker = (otherLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[otherLoc.id];
-                 if (!marker) return;
-
+                 const otherMarker = mapMarkers[otherLoc.id]; // Always from mapMarkers for "other"
                  const distance = haversineDistance(selectedLoc.location, otherLoc.location);
-                 let popupContent = `<b>${otherLoc.title}</b><br>Afstand: ${distance.toFixed(2)} km`; // Haversine specific popup
-                 marker.setPopupContent(popupContent);
-
+                 otherMarker.setPopupContent(`<b>${otherLoc.title}</b><br>Afstand: ${distance.toFixed(2)} km`);
                  distancesData.push({ id: otherLoc.id, title: otherLoc.title, distance: distance });
-
-                 if (map.hasLayer(markerToFocus) && map.hasLayer(marker)) {
+                 if (markerToFocus && map.hasLayer(markerToFocus) && map.hasLayer(otherMarker)) {
                       const line = L.polyline([selectedLoc.location, otherLoc.location], { color: '#ff0000', weight: 2, opacity: 0.75 }).addTo(map);
                       drawnHaversinePolylines.push(line);
                  }
              }
         });
-        if (markerToFocus) markerToFocus.setPopupContent(`<b>${selectedLoc.title}</b><br>(STARTPUNT)`); // Haversine specific popup
-
 
         distancesData.sort((a, b) => a.distance - b.distance);
         distancesData.forEach(data => {
@@ -999,13 +1085,15 @@
         if (distancesData.length === 0) {
             haversineDistanceListEl.innerHTML = '<li>Geen andere zichtbare locaties om afstanden mee te berekenen.</li>';
         }
-        updatePopupVisibility();
+        updatePopupVisibility(); // Ensure correct popups are open/closed
     }
 
 
     async function fetchAndDrawORSRoute(startLoc, endLoc) {
+        if (!startLoc || !endLoc) return;
         clearMapDrawings();
-        resetAllPopupContent(); // Resets to default, then we override for start/end
+        // resetAllPopupContent(); // Called by some paths
+
         directionsRouteSummaryEl.innerHTML = `<p class="loading-message">Route berekenen voor ${getProfileDisplayName(selectedRouteProfile)}...</p>`;
         directionsInfoDiv.style.display = 'block';
         haversineInfoDiv.style.display = 'none';
@@ -1045,11 +1133,11 @@
                     <p><strong>Afstand:</strong> ${distKm} km</p>
                     <p><strong>Geschatte Duur:</strong> ${durMin} min</p>`;
 
-                const startMarker = (startLoc === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[startLoc.id];
-                const endMarker = (endLoc === activeSeargedLocation) ? searchedLocationMarker : mapMarkers[endLoc.id];
+                const startMarkerInstance = getMarkerForLocation(startLoc);
+                const endMarkerInstance = getMarkerForLocation(endLoc);
 
-                 if (startMarker && map.hasLayer(startMarker)) startMarker.setPopupContent(`<b>${startLoc.title} (Start)</b><br>Route: ${distKm} km, ${durMin} min`);
-                 if (endMarker && map.hasLayer(endMarker)) endMarker.setPopupContent(`<b>${endLoc.title} (Eind)</b><br>Route: ${distKm} km, ${durMin} min`);
+                 if (startMarkerInstance && map.hasLayer(startMarkerInstance)) startMarkerInstance.setPopupContent(`<b>${startLoc.title} (Start)</b><br>Route: ${distKm} km, ${durMin} min`).openPopup();
+                 if (endMarkerInstance && map.hasLayer(endMarkerInstance)) endMarkerInstance.setPopupContent(`<b>${endLoc.title} (Eind)</b><br>Route: ${distKm} km, ${durMin} min`).openPopup();
 
                 if (drawnDirectionsRoutePolyline.getBounds().isValid()) map.fitBounds(drawnDirectionsRoutePolyline.getBounds().pad(0.1));
             } else {
@@ -1058,7 +1146,7 @@
         } catch (error) {
              directionsRouteSummaryEl.innerHTML = `<p class="error-message">Route berekening mislukt.<br>${error.message}</p>`;
         }
-        updatePopupVisibility();
+        updatePopupVisibility(); // After setting specific popups, this ensures others are handled (e.g. showAllPopups logic)
         updateInstructions();
     }
 
@@ -1067,13 +1155,13 @@
             proximityStatusMessageEl.textContent = 'Selecteer eerst een centrumpunt voor de analyse.';
             proximityStatusMessageEl.className = 'error-message';
             proximityStatusMessageEl.style.display = 'block';
-            proximityInfoDiv.style.display = 'block';
+            proximityInfoDiv.style.display = 'block'; // Show panel to display message
             proximityResultsListEl.innerHTML = '';
             return;
         }
 
         clearProximityResultsAndShape();
-        resetAllPopupContent(); // Ensure popups are reset, then proximity center might get a specific one
+        // resetAllPopupContent(); // Called by some paths
 
         proximityInfoDiv.style.display = 'block';
         proximityCenterNameEl.textContent = proximityCenterLocation.title;
@@ -1082,9 +1170,9 @@
         proximityStatusMessageEl.className = 'loading-message';
         proximityStatusMessageEl.style.display = 'block';
 
-        const proximityCenterMarker = (proximityCenterLocation === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[proximityCenterLocation.id];
-        if (proximityCenterMarker) { // Set specific popup for center of proximity analysis
-            proximityCenterMarker.setPopupContent(`<b>${proximityCenterLocation.title}</b><br>(CENTRUMPUNT NABIJHEID)`);
+        const centerMarkerInstance = getMarkerForLocation(proximityCenterLocation);
+        if (centerMarkerInstance && map.hasLayer(centerMarkerInstance)) {
+            centerMarkerInstance.setPopupContent(`<b>${proximityCenterLocation.title}</b><br>(CENTRUMPUNT NABIJHEID)`).openPopup();
         }
 
         proximityRadiusKm = parseFloat(proximityRadiusInput.value);
@@ -1096,7 +1184,7 @@
         } else if (proximityAnalysisType === 'time') {
             await findNearbyByTime();
         }
-        displayProximityResults(); // This also calls updatePopupVisibility
+        displayProximityResults();
     }
 
     async function findNearbyByDistance() {
@@ -1110,13 +1198,13 @@
         if (map.hasLayer(drawnProximityShape)) map.fitBounds(drawnProximityShape.getBounds().pad(0.05));
 
         allLocations.forEach(loc => {
-            if (loc.id === proximityCenterLocation.id || !shouldMarkerBeVisible(loc)) return;
+            if (loc.id === proximityCenterLocation.id || !shouldMarkerBeVisible(loc)) return; // Check visibility
             const distKm = haversineDistance(center, loc.location);
             if (distKm <= proximityRadiusKm) {
                 proximityResults.push({ ...loc, distance: distKm.toFixed(2) });
             }
         });
-        proximityResults.sort((a,b) => a.distance - b.distance);
+        proximityResults.sort((a,b) => parseFloat(a.distance) - parseFloat(b.distance));
     }
 
     async function findNearbyByTime() {
@@ -1157,17 +1245,27 @@
                 if (map.hasLayer(drawnProximityShape)) map.fitBounds(drawnProximityShape.getBounds().pad(0.05));
 
                 allLocations.forEach(loc => {
-                    if (loc.id === proximityCenterLocation.id || !shouldMarkerBeVisible(loc)) return;
+                    if (loc.id === proximityCenterLocation.id || !shouldMarkerBeVisible(loc)) return; // Check visibility
 
                     const turfPoint = turf.point([loc.location.lng, loc.location.lat]);
                     let isInside = false;
-                    drawnProximityShape.eachLayer(featureLayer => {
-                        if (featureLayer.feature && featureLayer.feature.geometry) {
-                            if (turf.booleanPointInPolygon(turfPoint, featureLayer.feature)) {
-                                isInside = true;
+                    // Check against each polygon in the FeatureCollection (isochrones can be multi-polygon)
+                    if (drawnProximityShape.feature && drawnProximityShape.feature.geometry.type === 'Polygon') {
+                        if (turf.booleanPointInPolygon(turfPoint, drawnProximityShape.feature)) isInside = true;
+                    } else if (drawnProximityShape.feature && drawnProximityShape.feature.geometry.type === 'MultiPolygon') {
+                         drawnProximityShape.feature.geometry.coordinates.forEach(polygonCoords => {
+                            if (turf.booleanPointInPolygon(turfPoint, turf.polygon(polygonCoords))) isInside = true;
+                        });
+                    } else { // Fallback for GeoJSON layer group from L.geoJSON
+                        drawnProximityShape.eachLayer(featureLayer => {
+                            if (featureLayer.feature && featureLayer.feature.geometry) {
+                                if (turf.booleanPointInPolygon(turfPoint, featureLayer.feature)) {
+                                    isInside = true;
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
+
                     if (isInside) {
                         proximityResults.push({ ...loc });
                     }
@@ -1201,13 +1299,21 @@
             proximityResults.forEach(loc => {
                 const li = document.createElement('li');
                 let text = loc.title;
-                if (loc.distance) text += ` (${loc.distance} km)`;
+                if (loc.distance) text += ` (${loc.distance} km)`; // distance only available for distance analysis
                 li.textContent = text;
+
+                // Update popups of result markers if they are predefined locations
+                const resultMarker = mapMarkers[loc.id];
+                if(resultMarker && map.hasLayer(resultMarker)) {
+                    let popupText = `<b>${loc.title}</b><br>Nabij ${proximityCenterLocation.title}`;
+                    if (loc.distance) popupText += ` (${loc.distance} km)`;
+                    resultMarker.setPopupContent(popupText);
+                }
                 proximityResultsListEl.appendChild(li);
             });
         }
         proximityInfoDiv.style.display = 'block';
-        updatePopupVisibility();
+        updatePopupVisibility(); // Ensure correct popups are open/closed
     }
 
     function debounce(func, delay) {
@@ -1245,8 +1351,11 @@
         features.forEach(feature => {
             const li = document.createElement('li');
             li.textContent = feature.properties.label;
+            // Capture feature data for the closure
+            const label = feature.properties.label;
+            const coords = feature.geometry.coordinates; // [lng, lat]
             li.addEventListener('click', () => {
-                 handlePeliasResultClick(feature.properties.label, feature.geometry.coordinates);
+                 handlePeliasResultClick(label, coords);
             });
             searchResultsListEl.appendChild(li);
         });
@@ -1255,73 +1364,119 @@
 
 
    function processCustomLocationSelection(label, coordinates_lng_lat, source = "search") {
-        searchInputEl.value = label;
-        searchResultsListEl.innerHTML = '';
+        searchInputEl.value = label; // Display selected label in search bar
+        searchResultsListEl.innerHTML = ''; // Clear suggestions
 
-        // Clear previous search marker and related selections if they are not part of the current flow
-        if (searchedLocationMarker) { map.removeLayer(searchedLocationMarker); searchedLocationMarker = null; }
+        // Remove previous transient searchedLocationMarker, if any. Committed markers are handled by mode logic.
+        if (searchedLocationMarker) {
+            map.removeLayer(searchedLocationMarker);
+            searchedLocationMarker = null;
+        }
+        activeSearchedLocation = null; // Clear previous transient search data
 
+        // Create new data and marker for the current search/click
         activeSearchedLocation = {
             id: `custom-${source}-${Date.now()}`, title: label,
             location: { lat: coordinates_lng_lat[1], lng: coordinates_lng_lat[0] }
-            // Note: Custom locations from search/map-click do not have 'image', 'address', 'hours', 'break' properties by default
         };
-        // A searched location is conceptually a "digipunt" if no other type is specified, use default icon.
         searchedLocationMarker = L.marker(activeSearchedLocation.location, { icon: digipuntIcon })
             .addTo(map)
-            .bindPopup(getPopupContent(activeSearchedLocation)) // Use getPopupContent for consistency
-            .openPopup(); // Open popup for newly searched/clicked map location
+            .bindPopup(getPopupContent(activeSearchedLocation))
+            .openPopup();
         map.setView(activeSearchedLocation.location, Math.max(map.getZoom(), 15));
 
-
+        // Clear selection styling from PREDEFINED list items
         document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end', 'selected-proximity-center'));
 
-        // Interactions with modes
+        // --- Mode-specific logic for the newly searched/clicked location ---
         if (currentMode === 'kaartweergave') {
-            // In kaartweergave, selecting a custom location doesn't initiate analysis.
-            // Its popup is already open. We might clear other selections if any.
+            // In kaartweergave, a new search just displays the point.
+            // Clear any other mode's specific custom points and data.
+            if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+            if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+            if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+            if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
             haversineSelectedLocation = null;
             directionsStartLocation = null; directionsEndLocation = null;
             proximityCenterLocation = null;
-            // Update popups for other markers if showAllPopups is true
-            updatePopupVisibility();
+            // The new searchedLocationMarker is already on map and its popup open.
         } else if (currentMode === 'haversine') {
-            haversineSelectedLocation = activeSearchedLocation;
+            if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; } // Clear old custom haversine point
+            haversineSelectedLocation = activeSearchedLocation; // New search becomes the center
+            customHaversineMarker = searchedLocationMarker;     // Commit its marker
+            searchedLocationMarker = null;                      // Mark as committed (no longer transient)
+
+            // Clear other modes' selections
             directionsStartLocation = null; directionsEndLocation = null; proximityCenterLocation = null;
-            displayHaversineDistances(activeSearchedLocation);
+            if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+            if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+            if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+
+            displayHaversineDistances(haversineSelectedLocation);
         } else if (currentMode === 'directions') {
-            proximityCenterLocation = null;
-            if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) {
-                directionsStartLocation = activeSearchedLocation; directionsEndLocation = null;
-                clearMapDrawings(); // Clear previous routes
+            proximityCenterLocation = null; // Clear proximity selections
+            if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+
+
+            if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) { // Selecting a new START point
+                // Clear previous start/end points and their custom markers
+                if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+                if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+
+                directionsStartLocation = activeSearchedLocation; // New search is the start
+                customDirectionsStartPtMarker = searchedLocationMarker; // Commit its marker
+                searchedLocationMarker = null; // Mark as committed
+
+                directionsEndLocation = null; // Reset end point
+
+                clearMapDrawings(); // Clear previous route lines
                 directionsInfoDiv.style.display = 'block';
-                directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${activeSearchedLocation.title}</b>.<br>Selecteer Eindpunt.`;
-                resetAllPopupContent(); // Reset general popups
-                searchedLocationMarker.setPopupContent(`<b>${activeSearchedLocation.title} (Start)</b>`); // Specific for directions
-            } else {
-                directionsEndLocation = activeSearchedLocation;
-                // Highlight previous start marker if it was a list item
-                if (directionsStartLocation && !directionsStartLocation.id.startsWith('custom-')) {
-                    const startLi = document.querySelector(`li[data-id="${directionsStartLocation.id}"]`);
-                    if (startLi) startLi.classList.add('selected-directions-start');
-                     // Update its popup if it's not the active searched one
-                    if(mapMarkers[directionsStartLocation.id]) mapMarkers[directionsStartLocation.id].setPopupContent(`<b>${directionsStartLocation.title} (Start)</b>`);
-                } else if (directionsStartLocation === activeSearchedLocation) {
-                    // This case should ideally not happen if logic is correct (start replaced by new search for end)
+                directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${directionsStartLocation.title}</b>.<br>Selecteer Eindpunt.`;
+                resetAllPopupContent(); // Reset other popups to default
+                if(customDirectionsStartPtMarker) customDirectionsStartPtMarker.setPopupContent(`<b>${directionsStartLocation.title} (Start)</b>`).openPopup();
+
+            } else { // Selecting an END point (directionsStartLocation is already set)
+                if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; } // Clear previous custom end marker
+
+                directionsEndLocation = activeSearchedLocation; // New search is the end
+                customDirectionsEndPtMarker = searchedLocationMarker; // Commit its marker
+                searchedLocationMarker = null; // Mark as committed
+
+                // Ensure start point's popup is correct (especially if it was custom)
+                const startMarkerToUpdate = getMarkerForLocation(directionsStartLocation);
+                if (startMarkerToUpdate && map.hasLayer(startMarkerToUpdate)) {
+                    startMarkerToUpdate.setPopupContent(`<b>${directionsStartLocation.title} (Start)</b>`).openPopup();
                 }
+                if (customDirectionsEndPtMarker && map.hasLayer(customDirectionsEndPtMarker)) { // Ensure end point's popup is also open
+                     customDirectionsEndPtMarker.setPopupContent(`<b>${directionsEndLocation.title} (Eind)</b>`).openPopup();
+                }
+
+
                 fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
             }
         } else if (currentMode === 'proximity') {
+            if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; } // Clear old custom proximity point
+            proximityCenterLocation = activeSearchedLocation; // New search becomes the center
+            customProximityCenterPtMarker = searchedLocationMarker; // Commit its marker
+            searchedLocationMarker = null; // Mark as committed
+
+            // Clear other modes' selections
             haversineSelectedLocation = null; directionsStartLocation = null; directionsEndLocation = null;
-            proximityCenterLocation = activeSearchedLocation;
+            if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+            if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+            if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+
+
             clearProximityResultsAndShape();
-            proximityCenterNameEl.textContent = activeSearchedLocation.title;
-            proximityInfoDiv.style.display = 'none';
-            resetAllPopupContent(); // Reset general popups
-            searchedLocationMarker.setPopupContent(`<b>${activeSearchedLocation.title}</b><br>(CENTRUMPUNT NABIJHEID)`);
+            proximityCenterNameEl.textContent = proximityCenterLocation.title;
+            proximityInfoDiv.style.display = 'none'; // Hide old results
+            resetAllPopupContent(); // Reset other popups
+            if(customProximityCenterPtMarker) customProximityCenterPtMarker.setPopupContent(`<b>${proximityCenterLocation.title}</b><br>(CENTRUMPUNT NABIJHEID)`).openPopup();
         }
+
+        updateMarkerVisibility(); // Ensure all markers (predefined, committed custom, transient) are correctly shown/hidden
+        updatePopupVisibility(); // Ensure popups are correctly managed
         updateInstructions();
-        // updatePopupVisibility() is called by displayHaversineDistances, fetchAndDrawORSRoute, or directly for kaartweergave
     }
 
 
@@ -1335,8 +1490,8 @@
             toggleMapClickModeButton.classList.add('active');
             toggleMapClickModeButton.textContent = 'Annuleer Kaartselectie';
             map.getContainer().style.cursor = 'crosshair';
-             searchInputEl.value = '';
-             searchResultsListEl.innerHTML = '';
+             searchInputEl.value = ''; // Clear search input when entering map click mode
+             searchResultsListEl.innerHTML = ''; // Clear search results
         } else {
             toggleMapClickModeButton.classList.remove('active');
             toggleMapClickModeButton.textContent = 'Pinpunt Locatie op Kaart';
@@ -1345,63 +1500,70 @@
     }
 
     function handleModeChange(event) {
+        const oldMode = currentMode;
         currentMode = event.target.value;
-        const oldActiveSearch = activeSearchedLocation;
 
-        clearSelectionsAndUI();
+        // Preserve active transient search if user switches mode with an uncommitted search
+        const preservedActiveSearchData = activeSearchedLocation;
+        const preservedActiveSearchMarker = searchedLocationMarker; // Marker itself
 
-        if (oldActiveSearch && (currentMode === 'kaartweergave' || currentMode === 'haversine' || currentMode === 'proximity')) {
-            activeSearchedLocation = oldActiveSearch;
-            if (activeSearchedLocation) {
-                 searchedLocationMarker = L.marker(activeSearchedLocation.location, { icon: digipuntIcon })
-                    .addTo(map).bindPopup(getPopupContent(activeSearchedLocation));
+        clearSelectionsAndUI(); // This clears all selections, including activeSearchedLocation and its marker
 
-                if (currentMode === 'kaartweergave') {
-                    // No specific selection, just show its popup if it's the only one.
-                    searchedLocationMarker.openPopup();
-                } else if (currentMode === 'haversine') {
-                     haversineSelectedLocation = activeSearchedLocation;
-                     // displayHaversineDistances will be called below
-                } else if (currentMode === 'proximity') {
-                     proximityCenterLocation = activeSearchedLocation;
-                     // Proximity panel updated below
-                }
+        // Restore transient search if it existed, UNLESS the new mode is directions and it would become start/end immediately
+        if (preservedActiveSearchData && preservedActiveSearchMarker) {
+            activeSearchedLocation = preservedActiveSearchData;
+            searchedLocationMarker = preservedActiveSearchMarker;
+            if (!map.hasLayer(searchedLocationMarker)) { // Add it back if cleared
+                searchedLocationMarker.addTo(map).openPopup();
             }
+            // If switching to a mode that immediately uses the search point, process it
+            if (currentMode === 'haversine') {
+                 processCustomLocationSelection(activeSearchedLocation.title, [activeSearchedLocation.location.lng, activeSearchedLocation.location.lat], activeSearchedLocation.id.includes("mapclick") ? "mapclick" : "search");
+            } else if (currentMode === 'proximity') {
+                 processCustomLocationSelection(activeSearchedLocation.title, [activeSearchedLocation.location.lng, activeSearchedLocation.location.lat], activeSearchedLocation.id.includes("mapclick") ? "mapclick" : "search");
+            } else if (currentMode === 'directions' && (!directionsStartLocation || (directionsStartLocation && directionsEndLocation))) {
+                // If directions mode is ready for a start point, use the searched location
+                processCustomLocationSelection(activeSearchedLocation.title, [activeSearchedLocation.location.lng, activeSearchedLocation.location.lat], activeSearchedLocation.id.includes("mapclick") ? "mapclick" : "search");
+            }
+             // For 'kaartweergave', the restored searchedLocationMarker is simply displayed.
         }
 
 
-        appTitleEl.textContent = 'Loading...';
+        appTitleEl.textContent = 'Loading...'; // Will be updated by updateInstructions or specific logic
         profileSelectorDiv.style.display = 'none';
         proximityControlsSection.style.display = 'none';
-        haversineInfoDiv.style.display = 'none';
-        directionsInfoDiv.style.display = 'none';
-        proximityInfoDiv.style.display = 'none';
-
+        // Info panels are hidden by clearSelectionsAndUI
 
         if (currentMode === 'kaartweergave') {
-            appTitleEl.textContent = 'Haversine';
-            // Popups and markers handled by clearSelectionsAndUI -> resetAllPopupContent and updateMarkerVisibility
+            appTitleEl.textContent = 'Haversine'; // Title seems to be fixed, adjust if needed
         } else if (currentMode === 'haversine') {
             appTitleEl.textContent = 'Haversine';
             if (haversineSelectedLocation) displayHaversineDistances(haversineSelectedLocation);
         } else if (currentMode === 'directions') {
             appTitleEl.textContent = 'Haversine';
             profileSelectorDiv.style.display = 'block';
-            // If directionsStartLocation & directionsEndLocation were somehow restored, could call fetchAndDrawORSRoute
+            if (directionsStartLocation && directionsEndLocation) {
+                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+            } else if (directionsStartLocation) {
+                directionsInfoDiv.style.display = 'block';
+                directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${directionsStartLocation.title}</b>.<br>Selecteer Eindpunt...`;
+                const startMarker = getMarkerForLocation(directionsStartLocation);
+                if(startMarker) startMarker.setPopupContent(`<b>${directionsStartLocation.title} (Start)</b>`).openPopup();
+            }
         } else if (currentMode === 'proximity') {
             appTitleEl.textContent = 'Haversine';
             proximityControlsSection.style.display = 'block';
             if (proximityCenterLocation) {
                 proximityCenterNameEl.textContent = proximityCenterLocation.title;
-                 const centerMarker = (proximityCenterLocation === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[proximityCenterLocation.id];
-                 if (centerMarker && map.hasLayer(centerMarker)) {
-                    centerMarker.setPopupContent(`<b>${proximityCenterLocation.title}</b><br>(CENTRUMPUNT NABIJHEID)`).openPopup();
-                 }
+                const centerMarker = getMarkerForLocation(proximityCenterLocation);
+                if(centerMarker) centerMarker.setPopupContent(`<b>${proximityCenterLocation.title}</b><br>(CENTRUMPUNT NABIJHEID)`).openPopup();
+                // proximityInfoDiv might show old results if analysis was run, clear or re-run
             }
         }
-        resetAllPopupContent(); // Ensure popups reflect the new mode
-        updateMarkerVisibility(); // Ensure correct markers are shown for the mode
-        updatePopupVisibility(); // Ensure popups are correctly open/closed
+        // Final updates after mode switch
+        resetAllPopupContent();
+        updateMarkerVisibility();
+        updatePopupVisibility();
         updateInstructions();
     }
 
@@ -1413,7 +1575,7 @@
 
         if (directionsStartLocation && directionsEndLocation) {
             fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
-        } else if (directionsStartLocation) {
+        } else if (directionsStartLocation) { // Only start selected, update prompt
             directionsInfoDiv.style.display = 'block';
             directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${directionsStartLocation.title}</b>.<br>Selecteer Eindpunt voor ${getProfileDisplayName(selectedRouteProfile)} route...`;
         }
@@ -1421,157 +1583,216 @@
 
 
     function handleLocationFilterChange() {
-         updateMarkerVisibility();
-         resetAllPopupContent(); // Popups might need to change if their type is now hidden/shown
+         updateMarkerVisibility(); // This will add/remove markers based on new filter state
+         resetAllPopupContent();   // Reset popups to default content for the mode
 
-        if (currentMode === 'haversine' && haversineSelectedLocation && haversineSelectedLocation !== activeSearchedLocation && !shouldMarkerBeVisible(haversineSelectedLocation)) {
-            clearSelectionsAndUI();
+        // If a selected location (predefined or custom) becomes hidden, clear the selection for that mode
+        if (currentMode === 'haversine' && haversineSelectedLocation && !shouldMarkerBeVisible(haversineSelectedLocation)) {
+            haversineSelectedLocation = null;
+            if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+            haversineInfoDiv.style.display = 'none';
+            clearMapDrawings(); // Clear haversine lines
         } else if (currentMode === 'haversine' && haversineSelectedLocation) {
-            displayHaversineDistances(haversineSelectedLocation);
+            displayHaversineDistances(haversineSelectedLocation); // Re-calculate with visible markers
         }
 
-        if (currentMode === 'directions' && directionsStartLocation && directionsEndLocation) {
-            const startStillValid = (directionsStartLocation === activeSearchedLocation) || shouldMarkerBeVisible(directionsStartLocation);
-            const endStillValid = (directionsEndLocation === activeSearchedLocation) || shouldMarkerBeVisible(directionsEndLocation);
-            if (!startStillValid || !endStillValid) {
-                clearSelectionsAndUI();
-            } else {
-                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
+        if (currentMode === 'directions') {
+            let clearDir = false;
+            if (directionsStartLocation && !shouldMarkerBeVisible(directionsStartLocation)) clearDir = true;
+            if (directionsEndLocation && !shouldMarkerBeVisible(directionsEndLocation)) clearDir = true;
+
+            if (clearDir) {
+                directionsStartLocation = null; directionsEndLocation = null;
+                if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+                if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+                directionsInfoDiv.style.display = 'none';
+                clearMapDrawings(); // Clear route lines
+            } else if (directionsStartLocation && directionsEndLocation) {
+                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation); // Re-calculate route
+            } else if (directionsStartLocation) { // Only start is set, update UI
+                directionsInfoDiv.style.display = 'block';
+                directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${directionsStartLocation.title}</b>.<br>Selecteer Eindpunt...`;
             }
-        } else if (currentMode === 'directions' && directionsStartLocation && !directionsEndLocation) {
-             const startStillValid = (directionsStartLocation === activeSearchedLocation) || shouldMarkerBeVisible(directionsStartLocation);
-             if (!startStillValid) clearSelectionsAndUI();
         }
 
-
-        if (currentMode === 'proximity' && proximityCenterLocation && proximityCenterLocation !== activeSearchedLocation && !shouldMarkerBeVisible(proximityCenterLocation)) {
-            clearSelectionsAndUI();
-        } else if (currentMode === 'proximity' && drawnProximityShape) {
+        if (currentMode === 'proximity' && proximityCenterLocation && !shouldMarkerBeVisible(proximityCenterLocation)) {
+            proximityCenterLocation = null;
+            if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+            clearProximityResultsAndShape(); // Clear analysis results and shape
+            proximityInfoDiv.style.display = 'none';
+        } else if (currentMode === 'proximity' && proximityCenterLocation && drawnProximityShape) {
+            // If proximity analysis was run, results might change due to marker visibility.
+            // Prompt user to re-run or automatically re-run. For now, clear and prompt.
             clearProximityResultsAndShape();
-            proximityInfoDiv.style.display = 'block';
+            proximityInfoDiv.style.display = 'block'; // Keep panel visible for message
             proximityStatusMessageEl.textContent = 'Zichtbaarheid van locaties is gewijzigd. Voer de analyse opnieuw uit.';
-            proximityStatusMessageEl.className = 'loading-message';
+            proximityStatusMessageEl.className = 'loading-message'; // Or 'info-message'
             proximityStatusMessageEl.style.display = 'block';
         }
+        updatePopupVisibility(); // Apply popup changes
+        updateInstructions();
+    }
+
+    function handleLocationClick(clickedLocData, clickedListItemEl) {
+    if (isMapClickModeActive) toggleMapClickSelectionMode(); // Exit map click mode if active
+
+    // If a list item is clicked, any transient search result is cleared.
+    if (clickedListItemEl) { // Only if a list item was clicked, not a map marker for a custom point
+        if (searchedLocationMarker) { map.removeLayer(searchedLocationMarker); searchedLocationMarker = null; }
+        activeSearchedLocation = null;
+        searchInputEl.value = ''; // Clear search bar
+    }
+
+    document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end', 'selected-proximity-center'));
+    if(clickedListItemEl) clickedListItemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    if (currentMode === 'kaartweergave') {
+        // Clear any "committed" custom markers from other modes
+        if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+        if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+        if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+        if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+        haversineSelectedLocation = null; directionsStartLocation = null; directionsEndLocation = null; proximityCenterLocation = null;
+        clearMapDrawings();
+
+        if (isDigipunt(clickedLocData) && !showDigipunten) { showDigipuntenToggle.checked = true; showDigipunten = true; }
+        if (isExternalPartner(clickedLocData) && !showExternalPartners) { showExternalPartnersToggle.checked = true; showExternalPartners = true; }
+        if (isStation(clickedLocData) && !showStations) { showStationsToggle.checked = true; showStations = true; }
+
+        updateMarkerVisibility(); // Apply visibility changes from potential checkbox toggles
+        resetAllPopupContent();   // Ensure all popups have fresh kaartweergave content
+
+        // Specifically open the popup for the clicked item
+        const marker = getMarkerForLocation(clickedLocData); // Use getMarkerForLocation for safety, though for list clicks it's mapMarkers[id]
+        if (marker && map.hasLayer(marker)) {
+            marker.openPopup();
+            map.setView(clickedLocData.location, Math.max(map.getZoom(), 14));
+        }
+        // Note: The final updatePopupVisibility call below will handle showAllPopups logic.
+        // If showAllPopups is false, we need to ensure this single popup isn't closed by it.
+        // This is handled by the conditional call to updatePopupVisibility at the end.
+
+    } else if (currentMode === 'haversine') {
+        if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+        if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+        if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+        if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+        directionsStartLocation = null; directionsEndLocation = null; proximityCenterLocation = null;
+
+        const isCurrentlySelected = haversineSelectedLocation && haversineSelectedLocation.id === clickedLocData.id;
+        clearMapDrawings();
+
+        if (isCurrentlySelected) {
+            haversineSelectedLocation = null;
+            if(clickedListItemEl) clickedListItemEl.classList.remove('selected-haversine');
+            haversineInfoDiv.style.display = 'none';
+            resetAllPopupContent();
+        } else {
+            haversineSelectedLocation = clickedLocData;
+            if (clickedListItemEl) clickedListItemEl.classList.add('selected-haversine');
+            displayHaversineDistances(clickedLocData); // This calls updatePopupVisibility
+        }
+    } else if (currentMode === 'directions') {
+        if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+        if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+        haversineSelectedLocation = null; proximityCenterLocation = null;
+
+        if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) {
+            if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+            if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+            clearMapDrawings();
+
+            directionsStartLocation = clickedLocData;
+            directionsEndLocation = null;
+            if (clickedListItemEl) clickedListItemEl.classList.add('selected-directions-start');
+
+            directionsInfoDiv.style.display = 'block';
+            directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${clickedLocData.title}</b>.<br>Selecteer Eindpunt...`;
+            resetAllPopupContent();
+            const startMarker = getMarkerForLocation(clickedLocData);
+            if(startMarker && map.hasLayer(startMarker)) startMarker.setPopupContent(`<b>${clickedLocData.title} (Start)</b>`).openPopup();
+
+        } else {
+            if (directionsStartLocation.id === clickedLocData.id) {
+                directionsStartLocation = null;
+                if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+                if (clickedListItemEl) clickedListItemEl.classList.remove('selected-directions-start');
+                directionsInfoDiv.style.display = 'none';
+                clearMapDrawings();
+                resetAllPopupContent();
+            } else {
+                if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+                directionsEndLocation = clickedLocData;
+                if (clickedListItemEl) clickedListItemEl.classList.add('selected-directions-end');
+                if (directionsStartLocation && !directionsStartLocation.id.startsWith('custom-')) {
+                     const startLi = document.querySelector(`#location-list li[data-id="${directionsStartLocation.id}"], #external-partner-list li[data-id="${directionsStartLocation.id}"], #station-list li[data-id="${directionsStartLocation.id}"]`);
+                     if (startLi) startLi.classList.add('selected-directions-start');
+                }
+                fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation); // This calls updatePopupVisibility
+            }
+        }
+    } else if (currentMode === 'proximity') {
+        if (customProximityCenterPtMarker) { map.removeLayer(customProximityCenterPtMarker); customProximityCenterPtMarker = null; }
+        if (customHaversineMarker) { map.removeLayer(customHaversineMarker); customHaversineMarker = null; }
+        if (customDirectionsStartPtMarker) { map.removeLayer(customDirectionsStartPtMarker); customDirectionsStartPtMarker = null; }
+        if (customDirectionsEndPtMarker) { map.removeLayer(customDirectionsEndPtMarker); customDirectionsEndPtMarker = null; }
+        haversineSelectedLocation = null; directionsStartLocation = null; directionsEndLocation = null;
+
+        const isCurrentlySelected = proximityCenterLocation && proximityCenterLocation.id === clickedLocData.id;
+        clearMapDrawings();
+
+        if (isCurrentlySelected) {
+            proximityCenterLocation = null;
+            if(clickedListItemEl) clickedListItemEl.classList.remove('selected-proximity-center');
+            clearProximityResultsAndShape();
+            proximityInfoDiv.style.display = 'none';
+            resetAllPopupContent();
+        } else {
+            proximityCenterLocation = clickedLocData;
+            if (clickedListItemEl) clickedListItemEl.classList.add('selected-proximity-center');
+            proximityCenterNameEl.textContent = clickedLocData.title;
+            clearProximityResultsAndShape();
+            proximityInfoDiv.style.display = 'none';
+            resetAllPopupContent();
+            const centerMarker = getMarkerForLocation(clickedLocData);
+            if(centerMarker && map.hasLayer(centerMarker)) centerMarker.setPopupContent(`<b>${clickedLocData.title}</b><br>(CENTRUMPUNT NABIJHEID)`).openPopup();
+        }
+    }
+
+    // Focus map on selected item from list/map, if not in kaartweergave (where it's handled inside the block)
+    // For kaartweergave, setView is already done inside its block.
+    if (currentMode !== 'kaartweergave') {
+        const markerToFocus = getMarkerForLocation(clickedLocData);
+        if (markerToFocus && map.hasLayer(markerToFocus)) {
+             map.setView(clickedLocData.location, Math.max(map.getZoom(), 14));
+        } else if (clickedLocData.location) {
+            map.setView(clickedLocData.location, Math.max(map.getZoom(), 14));
+        }
+    }
+
+    updateMarkerVisibility(); // Ensures correct markers are generally visible
+
+    // Conditional final popup update:
+    if (currentMode === 'kaartweergave') {
+        if (showAllPopupsToggle.checked) {
+            // If "show all" is checked, then updatePopupVisibility will open all relevant popups.
+            updatePopupVisibility();
+        }
+        // If "show all" is NOT checked, the single popup opened earlier in the 'kaartweergave'
+        // block should remain open, and other popups should be closed.
+        // updatePopupVisibility() IF CALLED would close the single one if it's not in popupsToOpenMarkers.
+        // By NOT calling it here when showAllPopups is false, the single popup state is preserved.
+        // Other popups would have been closed by previous calls or by updatePopupVisibility
+        // when showAllPopups was turned off.
+    } else {
+        // For other modes, their specific functions (displayHaversine, fetchRoute, displayProximity)
+        // often handle their primary popups and then call updatePopupVisibility,
+        // or we rely on this final call for general consistency (like showAllPopups in other modes).
         updatePopupVisibility();
     }
 
-   function handleLocationClick(clickedLocData, clickedListItemEl) {
-        if (isMapClickModeActive) toggleMapClickSelectionMode();
-
-        if (clickedListItemEl && activeSearchedLocation && activeSearchedLocation.id !== clickedLocData.id) {
-            if (searchedLocationMarker) map.removeLayer(searchedLocationMarker);
-            searchedLocationMarker = null;
-            activeSearchedLocation = null;
-            searchInputEl.value = '';
-        }
-
-        document.querySelectorAll('li[data-id]').forEach(item => item.classList.remove('selected-haversine', 'selected-directions-start', 'selected-directions-end', 'selected-proximity-center'));
-
-        if (currentMode === 'kaartweergave') {
-            haversineSelectedLocation = null; directionsStartLocation = null; directionsEndLocation = null; proximityCenterLocation = null;
-            clearMapDrawings();
-
-            // Sync checkboxes if list item is clicked and its category is off
-            if (isDigipunt(clickedLocData) && !showDigipunten) {
-                showDigipuntenToggle.checked = true; showDigipunten = true;
-            }
-            if (isExternalPartner(clickedLocData) && !showExternalPartners) {
-                showExternalPartnersToggle.checked = true; showExternalPartners = true;
-            }
-            if (isStation(clickedLocData) && !showStations) {
-                showStationsToggle.checked = true; showStations = true;
-            }
-
-            updateMarkerVisibility(); // Apply visibility changes from potential checkbox toggles
-            resetAllPopupContent();   // Ensure all popups have fresh kaartweergave content
-            updatePopupVisibility();  // Apply showAllPopups logic, or close others if showAllPopups is false
-
-            const marker = mapMarkers[clickedLocData.id];
-            if (marker && map.hasLayer(marker)) { // Check map.hasLayer as it might have just become visible
-                marker.openPopup(); // Specifically open the clicked one
-                map.setView(clickedLocData.location, Math.max(map.getZoom(), 14));
-            }
-            // No list item selection style for kaartweergave mode specifically.
-        } else if (currentMode === 'haversine') {
-            const isCurrentlySelected = haversineSelectedLocation && haversineSelectedLocation.id === clickedLocData.id;
-            directionsStartLocation = null; directionsEndLocation = null; proximityCenterLocation = null;
-            clearMapDrawings();
-
-            if (isCurrentlySelected) {
-                haversineSelectedLocation = null;
-                if(clickedListItemEl) clickedListItemEl.classList.remove('selected-haversine');
-                haversineInfoDiv.style.display = 'none';
-                resetAllPopupContent();
-            } else {
-                haversineSelectedLocation = clickedLocData;
-                if (clickedListItemEl) clickedListItemEl.classList.add('selected-haversine');
-                displayHaversineDistances(clickedLocData);
-            }
-        } else if (currentMode === 'directions') {
-            haversineSelectedLocation = null; proximityCenterLocation = null;
-
-            if (!directionsStartLocation || (directionsStartLocation && directionsEndLocation)) {
-                clearMapDrawings();
-                directionsEndLocation = null;
-                directionsStartLocation = clickedLocData;
-                if (clickedListItemEl) clickedListItemEl.classList.add('selected-directions-start');
-                directionsInfoDiv.style.display = 'block';
-                directionsRouteSummaryEl.innerHTML = `Startpunt: <b>${clickedLocData.title}</b>.<br>Selecteer Eindpunt...`;
-                resetAllPopupContent();
-                if(mapMarkers[clickedLocData.id]) mapMarkers[clickedLocData.id].setPopupContent(`<b>${clickedLocData.title} (Start)</b>`).openPopup();
-
-            } else {
-                if (directionsStartLocation.id === clickedLocData.id) {
-                    directionsStartLocation = null; directionsEndLocation = null;
-                    if(clickedListItemEl) clickedListItemEl.classList.remove('selected-directions-start');
-                    directionsInfoDiv.style.display = 'none';
-                    clearMapDrawings();
-                    resetAllPopupContent();
-                } else {
-                    directionsEndLocation = clickedLocData;
-                    if (clickedListItemEl) clickedListItemEl.classList.add('selected-directions-end');
-                    if (directionsStartLocation && !directionsStartLocation.id.startsWith('custom-')) {
-                         const startLi = document.querySelector(`li[data-id="${directionsStartLocation.id}"]`);
-                         if (startLi) startLi.classList.add('selected-directions-start');
-                    }
-                    fetchAndDrawORSRoute(directionsStartLocation, directionsEndLocation);
-                }
-            }
-        } else if (currentMode === 'proximity') {
-            const isCurrentlySelected = proximityCenterLocation && proximityCenterLocation.id === clickedLocData.id;
-            haversineSelectedLocation = null; directionsStartLocation = null; directionsEndLocation = null;
-            clearMapDrawings();
-
-            if (isCurrentlySelected) {
-                proximityCenterLocation = null;
-                if(clickedListItemEl) clickedListItemEl.classList.remove('selected-proximity-center');
-                clearProximityResultsAndShape();
-                proximityInfoDiv.style.display = 'none';
-                resetAllPopupContent();
-            } else {
-                proximityCenterLocation = clickedLocData;
-                if (clickedListItemEl) clickedListItemEl.classList.add('selected-proximity-center');
-                proximityCenterNameEl.textContent = clickedLocData.title;
-                clearProximityResultsAndShape();
-                proximityInfoDiv.style.display = 'none';
-                resetAllPopupContent();
-                if(mapMarkers[clickedLocData.id]) mapMarkers[clickedLocData.id].setPopupContent(`<b>${clickedLocData.title}</b><br>(CENTRUMPUNT NABIJHEID)`).openPopup();
-            }
-        }
-
-        const selectedMarkerForFocus = (clickedLocData === activeSearchedLocation) ? searchedLocationMarker : mapMarkers[clickedLocData.id];
-        if (selectedMarkerForFocus && map.hasLayer(selectedMarkerForFocus) && currentMode !== 'kaartweergave') {
-             map.setView(clickedLocData.location, Math.max(map.getZoom(), 14));
-        } else if (clickedLocData.location && currentMode !== 'kaartweergave') {
-            map.setView(clickedLocData.location, Math.max(map.getZoom(), 14));
-        }
-
-        updateInstructions();
-        if (currentMode !== 'kaartweergave' && currentMode !== 'haversine' && !(currentMode === 'directions' && directionsStartLocation && directionsEndLocation) && currentMode !== 'proximity') {
-             updatePopupVisibility();
-        }
-    }
+    updateInstructions();
+}
 
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -1589,29 +1810,30 @@
             listItem.textContent = loc.title;
             listItem.setAttribute('data-id', loc.id);
 
+            let iconToUse = digipuntIcon; // Default
             if (isStation(loc)) {
-                marker = L.marker(loc.location, { icon: stationEmojiIcon });
+                iconToUse = stationEmojiIcon;
                 stationListEl.appendChild(listItem); listItem.classList.add('station-item');
             } else if (isExternalPartner(loc)) {
-                 marker = L.marker(loc.location, { icon: externalPartnerEmojiIcon });
-                 externalPartnerListEl.appendChild(listItem); listItem.classList.add('location-item');
+                 iconToUse = externalPartnerEmojiIcon;
+                 externalPartnerListEl.appendChild(listItem); listItem.classList.add('location-item'); // Assuming 'location-item' is general enough
             } else { // isDigipunt
-                marker = L.marker(loc.location, { icon: digipuntIcon });
                 locationListEl.appendChild(listItem); listItem.classList.add('location-item');
             }
-            marker.bindPopup(getPopupContent(loc), { autoClose: false, className: 'custom-popup' });
+            marker = L.marker(loc.location, { icon: iconToUse });
+            marker.bindPopup(getPopupContent(loc), { autoClose: false, closeOnClick: true, className: 'custom-popup' }); // autoClose: false good for showAllPopups
             mapMarkers[loc.id] = marker;
 
             listItem.addEventListener('click', () => handleLocationClick(loc, listItem));
-            marker.on('click', (e) => {
-                 L.DomEvent.stopPropagation(e);
+            marker.on('click', (e) => { // Handle clicks on predefined map markers
+                 L.DomEvent.stopPropagation(e); // Prevent map click if icon is clicked
+                 // Find corresponding list item to trigger its click handler for consistent state updates
                  const liForMarker = document.querySelector(`#location-list li[data-id="${loc.id}"], #external-partner-list li[data-id="${loc.id}"], #station-list li[data-id="${loc.id}"]`);
                  if (liForMarker) {
-                      liForMarker.click();
-                 } else if (activeSearchedLocation && activeSearchedLocation.id === loc.id) {
-                     handleLocationClick(activeSearchedLocation, null);
+                      liForMarker.click(); // Simulate list item click
                  } else {
-                     handleLocationClick(loc, null);
+                     // Fallback if no list item (should not happen for predefined locations)
+                     handleLocationClick(loc, null); // Pass null for listItemEl
                  }
             });
         });
@@ -1621,7 +1843,7 @@
         showExternalPartnersToggle.checked = showExternalPartners;
         showStationsToggle.checked = showStations;
 
-        appTitleEl.textContent = 'Haversine';
+        appTitleEl.textContent = 'Haversine'; // Initial title - may need adjustment
         profileSelectorDiv.style.display = 'none';
         proximityControlsSection.style.display = 'none';
         currentProfileDisplayEl.textContent = getProfileDisplayName(selectedRouteProfile);
@@ -1638,10 +1860,11 @@
             proximityTimeControlsGroup.style.display = 'block';
         }
 
-        resetAllPopupContent();
-        updateInstructions();
-        updateMarkerVisibility();
-        updatePopupVisibility();
+        // Initial UI setup
+        resetAllPopupContent(); // Set initial popup contents
+        updateInstructions();   // Set initial instructions
+        updateMarkerVisibility(); // Show/hide markers based on default filters
+        updatePopupVisibility();  // Manage popups (e.g., if showAllPopups is true initially)
 
 
         modeRadioButtons.forEach(radio => radio.addEventListener('change', handleModeChange));
@@ -1655,7 +1878,9 @@
 
         toggleMapClickModeButton.addEventListener('click', toggleMapClickSelectionMode);
         toggleInstructionsBtn.addEventListener('click', function() {
-            instructionsEl.style.display = (instructionsEl.style.display === 'none' || instructionsEl.style.display === '') ? 'block' : 'none';
+            const isHidden = instructionsEl.style.display === 'none' || instructionsEl.style.display === '';
+            instructionsEl.style.display = isHidden ? 'block' : 'none';
+            this.textContent = isHidden ? ' Hide Instructions' : '💡'; // Optional: change button text
         });
 
         proximityTypeSelect.addEventListener('change', (e) => {
@@ -1676,25 +1901,33 @@
                 const { lat, lng } = e.latlng;
                 const title = `Kaartselectie (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
                 processCustomLocationSelection(title, [lng, lat], "mapclick");
-                toggleMapClickSelectionMode();
+                toggleMapClickSelectionMode(); // Automatically exit map click mode after selection
             }
         });
 
         searchInputEl.addEventListener('input', (event) => {
-            if (isMapClickModeActive && event.target.value.length > 0) {
-                toggleMapClickSelectionMode();
+            if (isMapClickModeActive && event.target.value.length > 0) { // If user types while in map click mode
+                toggleMapClickSelectionMode(); // Exit map click mode
             }
             debouncedFetchSuggestions(event.target.value);
         });
          searchInputEl.addEventListener('focus', () => {
-             if (isMapClickModeActive) toggleMapClickSelectionMode();
+             if (isMapClickModeActive) toggleMapClickSelectionMode(); // Exit map click mode if search is focused
          });
+
+        // Prevent search results from disappearing too quickly on blur
+        let searchResultsListFocused = false;
+        searchResultsListEl.addEventListener('mouseenter', () => searchResultsListFocused = true);
+        searchResultsListEl.addEventListener('mouseleave', () => searchResultsListFocused = false);
+
         searchInputEl.addEventListener('blur', () => {
             setTimeout(() => {
-                if (!searchResultsListEl.contains(document.activeElement)) {
+                // Only clear if focus hasn't moved to the results list itself (e.g. by clicking a scrollbar)
+                // and ensure the active element is not within the search results list (e.g. a clicked item).
+                if (!searchResultsListFocused && !searchResultsListEl.contains(document.activeElement)) {
                      searchResultsListEl.innerHTML = '';
                 }
-            }, 150);
+            }, 200); // Increased delay slightly
         });
     });
 </script>
