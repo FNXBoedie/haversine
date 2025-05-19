@@ -11,410 +11,663 @@
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin="anonymous"></script>
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
-<style>
-    html, body {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-        overflow: hidden;
-        background-color: #f0f2f5; /* Overall app background */
-    }
-
-    #app-container {
-        display: flex;
-        width: 100%;
-        height: 100%;
-    }
-
-    #sidebar {
-        width: 400px;
-        background-color: #f0f2f5; /* Matches app background, sections will be distinct */
-        padding: 20px; /* Overall padding for sidebar */
-        border-right: 1px solid #d1d1d6;
-        overflow-y: auto;
-        height: 100vh;
-        box-sizing: border-box;
-        position: relative; /* Added for positioning children absolutely */
-    }
-
-    #sidebar::-webkit-scrollbar { width: 6px; }
-    #sidebar::-webkit-scrollbar-track { background: transparent; border-radius: 3px; }
-    #sidebar::-webkit-scrollbar-thumb { background: #c1c1c7; border-radius: 3px; }
-    #sidebar::-webkit-scrollbar-thumb:hover { background: #a8a8ae; }
-
-    #sidebar h2 {
-        margin-top: 0;
-        margin-bottom: 20px;
-        color: #1d1d1f;
-        font-size: 1.7em;
-        font-weight: 600;
-    }
-
-    /* Instructions Toggle Button */
-    #toggle-instructions-btn {
-        position: absolute;
-        top: 22px; /* Align with H2 title */
-        right: 20px; /* Respect sidebar padding */
-        font-size: 1.6em; /* Icon size */
-        cursor: pointer;
-        color: #6e6e73;
-        z-index: 10;
-        transition: color 0.2s;
-        line-height: 1; /* Ensure consistent vertical alignment */
-    }
-    #toggle-instructions-btn:hover {
-        color: #007aff;
-    }
-
-
-    .sidebar-section {
-        background-color: #ffffff; /* Default white background for sections */
-        padding: 18px 20px;
-        border-radius: 10px;
-        margin-bottom: 18px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
-    }
-
-    #mode-selector,
-    #search-section,
-    #controls-section,
-    #profile-selector, /* For Directions */
-    #proximity-controls-section, /* For Proximity */
-    #location-list-container,
-    #external-partner-list-container,
-    #station-list-container
-     {
-        /* Common section styling applied */
-    }
-     #proximity-controls-section label,
-     #proximity-controls-section input,
-     #proximity-controls-section select {
-        display: block;
-        margin-bottom: 8px;
-        width: 100%;
-        box-sizing: border-box;
-     }
-     #proximity-controls-section input[type="number"],
-     #proximity-controls-section select {
-        padding: 8px 10px;
-        border: 1px solid #d1d1d6;
-        border-radius: 5px;
-        font-size: 0.9em;
-     }
-     #proximity-controls-section label {
-         margin-bottom: 4px;
-         font-size: 0.85em;
-         color: #333;
-         font-weight: 500;
-     }
-
-
-    /* Instructions section - specific styling */
-    #instructions {
-        color: #333333;
-        font-size: 0.9em;
-        line-height: 1.5;
-        display: none; /* Initially hidden */
-        background-color: #eef7ff; /* Light blue background */
-    }
-    #instructions p { margin-top: 0; margin-bottom: 8px; }
-    #instructions p:last-child { margin-bottom: 0; }
-
-
-    #profile-selector { display: none; } /* For Directions */
-    #proximity-controls-section { display: none; } /* For Proximity */
-
-
-    #mode-selector label,
-    #profile-selector label,
-    #controls-section label {
-        margin-right: 10px;
-        display: inline-flex;
-        align-items: center;
-        font-size: 0.95em;
-        color: #333333;
-        cursor: pointer;
-        position: relative;
-    }
-
-    #controls-section label { display: block; margin-bottom: 10px; }
-    #controls-section label:last-child { margin-bottom: 0; }
-
-    #mode-selector input[type="radio"],
-    #profile-selector input[type="radio"],
-    #controls-section input[type="checkbox"] {
-        margin-right: 8px;
-        accent-color: #007aff;
-        transform: scale(1.1);
-        cursor: pointer;
-    }
-
-    #search-section h3,
-    #profile-selector h3,
-    #proximity-controls-section h3,
-    #location-list-container h3,
-    #external-partner-list-container h3,
-    #station-list-container h3,
-    #controls-section h3 {
-        margin-top: 0;
-        margin-bottom: 12px;
-        font-size: 0.85em;
-        font-weight: 600;
-        color: #6e6e73;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Search Input, Results, and Map Click Button Styling */
-    #search-input {
-        width: 100%;
-        padding: 10px 12px;
-        margin-bottom: 10px;
-        border: 1px solid #d1d1d6;
-        border-radius: 7px;
-        box-sizing: border-box;
-        font-size: 0.95em;
-        background-color: #f9f9f9; /* Slightly different from section bg for inputs */
-        color: #1d1d1f;
-    }
-    #search-input:focus {
-        border-color: #007aff;
-        outline: none;
-        background-color: #ffffff;
-        box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
-    }
-    #search-results-container {
-        max-height: 180px; /* Limit height of results */
-        overflow-y: auto;
-        border-radius: 7px;
-        background-color: #ffffff; /* Match section bg */
-    }
-    #search-results-list {
-        list-style-type: none;
-        padding: 0;
-        margin: 0;
-    }
-    #search-results-list li {
-        padding: 10px 14px;
-        cursor: pointer;
-        font-size: 0.9em;
-        color: #1d1d1f;
-        border-bottom: 1px solid #f0f2f5; /* Subtle separator */
-        transition: background-color 0.15s ease;
-    }
-    #search-results-list li:last-child { border-bottom: none; }
-    #search-results-list li:hover { background-color: #e9e9f0; } /* Subtle hover */
-
-    /* Style for the map click button */
-    .map-click-button { /* Shared by toggle-map-click-mode and run-proximity-analysis */
-        width: 100%;
-        box-sizing: border-box;
-        padding: 10px 12px;
-        margin-top: 10px;
-        border: 1px solid #007aff;
-        border-radius: 7px;
-        background-color: #f0f2f5;
-        color: #007aff;
-        font-size: 0.9em;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.2s, color 0.2s, border-color 0.2s;
-        text-align: center;
-    }
-    .map-click-button:hover {
-        background-color: #e9f5ff;
-        border-color: #005bb5;
-    }
-    .map-click-button.active { /* For toggle-map-click-mode */
-        background-color: #007aff;
-        color: white;
-        border-color: #005bb5;
-    }
-    .map-click-button.active:hover {
-        background-color: #005bb5;
-    }
-
-
-    /* Scrollbar for search results (WebKit) */
-    #search-results-container::-webkit-scrollbar { width: 5px; }
-    #search-results-container::-webkit-scrollbar-track { background: transparent; }
-    #search-results-container::-webkit-scrollbar-thumb { background: #c1c1c7; border-radius: 3px;}
-    #search-results-container::-webkit-scrollbar-thumb:hover { background: #a8a8ae; }
-
-    #reset-selection {
-        display: block;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 12px 18px;
-        margin-bottom: 18px;
-        background-color: #2d93ff;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: 500;
-        font-size: 0.95em;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-        text-align: center;
-    }
-    #reset-selection:hover { background-color: #005bb5; }
-
-    /* Combined list styling for all types */
-    #location-list, #external-partner-list, #station-list, #proximity-results-list { list-style-type: none; padding: 0px; margin: 0; }
-    #location-list li, #external-partner-list li, #station-list li, #proximity-results-list li {
-        padding: 11px 14px 11px 38px;
-        cursor: pointer;
-        transition: background-color 0.15s ease, color 0.15s ease;
-        font-size: 0.95em;
-        color: #1d1d1f;
-        border-radius: 7px;
-        margin-bottom: 4px;
-        position: relative;
-    }
-    #proximity-results-list li { cursor: default; } /* Results are not clickable to re-select */
-    #proximity-results-list li::before { content: '✔️'; left: 12px; color: #007aff }
-
-
-    #location-list li::before,
-    #external-partner-list li::before,
-    #station-list li::before {
-        position: absolute;
-        left: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: 1.1em;
-        color: #8e8e93;
-        transition: color 0.15s ease;
-    }
-    /* Icons for each type (in the list) */
-    #location-list li.location-item::before { content: '📍'; }
-    #external-partner-list li.location-item::before { content: '📌'; }
-    #station-list li.station-item::before { content: '🚂'; }
-
-    #location-list li:last-child,
-    #external-partner-list li:last-child,
-    #station-list li:last-child,
-    #proximity-results-list li:last-child { margin-bottom: 0; }
-
-    #location-list li:hover,
-    #external-partner-list li:hover,
-    #station-list li:hover { background-color: #e9e9f0; }
-
-    #location-list li:not([class*="selected-"]):hover::before,
-    #external-partner-list li:not([class*="selected-"]):hover::before,
-    #station-list li:not([class*="selected-"]):hover::before { color: #2289f7; }
-
-
-    /* Selection styling */
-    li[data-id].selected-haversine,
-    li[data-id].selected-directions-start,
-    li[data-id].selected-directions-end,
-    li[data-id].selected-proximity-center { /* Added for proximity center */
-         color: white; font-weight: 500;
-    }
-    li[data-id].selected-haversine::before,
-    li[data-id].selected-directions-start::before,
-    li[data-id].selected-directions-end::before,
-    li[data-id].selected-proximity-center::before { /* Added for proximity center */
-        color: white;
-    }
-    li[data-id].selected-haversine { background-color: #56a8ff; }
-    li[data-id].selected-directions-start { background-color: #56a8ff; }
-    li[data-id].selected-directions-end { background-color: #67e186; }
-    li[data-id].selected-proximity-center { background-color: #ff9500; } /* Orange for proximity center */
-
-
-    #map-container { flex-grow: 1; height: 100vh; }
-
-    .info-panel {
-        margin-bottom: 18px; padding: 18px 20px; display: none;
-        background-color: #ffffff; border-radius: 10px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
-    }
-    #sidebar > .info-panel:last-of-type { margin-bottom: 0; }
-    .info-panel h3 { font-size: 1.0em; font-weight: 600; color: #1d1d1f; margin-top: 0; margin-bottom: 15px; }
-    .info-panel ul, .info-panel div { font-size: 0.92em; list-style-type: none; padding: 0; color: #333333; }
-    .info-panel li { padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
-    .info-panel li:last-child { border-bottom: none; }
-    .info-panel .error-message, .info-panel .loading-message { font-style: normal; padding: 5px 0; }
-    .info-panel .error-message { color: #ff3b30; font-weight: 500; }
-    .info-panel .loading-message { color: #555555; }
-    #selected-location-name-haversine { font-weight: 600; color: #007aff; }
-    #selected-location-name-directions-start { font-weight: 600; color: #4da1fa; }
-    #selected-location-name-directions-end { font-weight: 600; color: #55c671; }
-    #proximity-center-name { font-weight: 600; color: #ff9500; } /* Orange for proximity */
-    #proximity-parameters-display { font-size: 0.85em; color: #6e6e73; margin-bottom: 10px; }
-
-
-    .custom-popup .leaflet-popup-content-wrapper {
-        background: #ffffff; border-radius: 12px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        padding: 0; border: 0.5px solid rgba(0,0,0,0.08);
-    }
-    .custom-popup .leaflet-popup-content {
-        margin: 0; padding: 12px 15px;
-        font-size: 13px;
-        line-height: 1.45;
-        color: #1d1d1f;
-        max-height: 320px; /* Increased max-height for images and opening hours */
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    .custom-popup .leaflet-popup-content strong { font-weight: 600; color: #000000; }
-    .custom-popup .leaflet-popup-content em { font-style: italic; color: #555; font-size: 0.9em; }
-    .custom-popup .leaflet-popup-content .hours-block { margin-top: 8px; font-size: 0.9em; line-height: 1.5; }
-    .custom-popup .leaflet-popup-content .hours-block br { margin-bottom: 2px; }
-    .custom-popup .leaflet-popup-content .popup-image {
-        width: 100%;
-        max-height: 100px; /* Adjust as needed, ensuring total popup content fits 300px */
-        object-fit: cover;
-        border-radius: 4px;
-        margin-top: 8px;
-        margin-bottom: 8px;
-    }
-
-
-    .custom-popup .leaflet-popup-tip { background: #ffffff; border: 0.5px solid rgba(0,0,0,0.08); box-shadow: none; }
-    .custom-popup a.leaflet-popup-close-button {
-        position: absolute; top: 8px; right: 10px; padding: 0; width: 24px; height: 24px;
-        font-size: 22px; line-height: 24px; color: #b0b0b5; text-align: center;
-        text-decoration: none; font-weight: normal; background: transparent;
-        border-radius: 50%; transition: color 0.2s ease, background-color 0.2s ease;
-    }
-    .custom-popup a.leaflet-popup-close-button:hover { color: #1d1d1f; background-color: rgba(0,0,0,0.05); }
-
-    .leaflet-div-icon { background: none; border: none; }
-    .station-emoji-marker, .external-partner-emoji-marker {
-        display: flex; align-items: center; justify-content: center;
-        font-size: 30px; text-shadow: 0 0 3px rgba(0,0,0,0.3);
-        width: 36px !important; height: 36px !important;
-    }
-
-    #mode-selector {
-    display: grid; /* Use grid layout */
-    grid-template-columns: 1fr 1fr; /* Create two columns of equal width */
-    gap: 10px 20px; /* Add space between rows (10px) and columns (20px) */
-    /* Inherits other styles from .sidebar-section */
-    background-color: #ffffff; /* Default white background for sections */
-    padding: 18px 20px;
-    border-radius: 10px;
-    margin-bottom: 18px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03);
-}
-
-#mode-selector label {
-    /* No need for margin-right when using gap in grid */
-    display: flex; /* Keep display flex for internal alignment of radio button and text */
-    align-items: center;
-    /* Existing font-size, color, cursor, position: relative */
-    font-size: 0.95em;
-    color: #333333;
-    cursor: pointer;
-    position: relative;
-}
-
-</style>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            overflow: hidden;
+            background-color: #f0f2f5; /* Overall app background */
+        }
+    
+        #app-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+    
+        /* Glassmorphic Sidebar Style */
+        #sidebar {
+            width: 360px;
+            /* ORIGINAL: background-color: #f0f2f5; */
+            background: hsla(220, 15%, 96%, 0.7); /* Light, cool white-ish with transparency */
+            backdrop-filter: blur(25px) saturate(150%);
+            -webkit-backdrop-filter: blur(25px) saturate(150%);
+            padding: 20px; /* Overall padding for sidebar */
+            /* ORIGINAL: border-right: 1px solid #d1d1d6; */
+            border-right: 1px solid hsla(220, 15%, 85%, 0.5); /* Softer border */
+            overflow-y: auto;
+            height: 100vh;
+            box-sizing: border-box;
+            position: relative; /* Added for positioning children absolutely */
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.17); /* Softer, more diffused shadow */
+            color: #1d1d1f; /* Default text color for better contrast */
+        }
+    
+        /* Custom Scrollbar for Webkit Browsers (Chrome, Safari, Edge) - More subtle glass style */
+        #sidebar::-webkit-scrollbar {
+            width: 7px; /* Slightly wider for visibility */
+        }
+        #sidebar::-webkit-scrollbar-track {
+            background: transparent; /* Track is invisible */
+            border-radius: 10px;
+        }
+        #sidebar::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.25); /* Subtle scrollbar thumb */
+            border-radius: 10px;
+        }
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.35);
+        }
+    
+        #sidebar h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #1d1d1f;
+            font-size: 1.7em;
+            font-weight: 600;
+        }
+    
+        /* Instructions Toggle Button */
+        #toggle-instructions-btn {
+            position: absolute;
+            top: 22px; /* Align with H2 title */
+            right: 20px; /* Respect sidebar padding */
+            font-size: 1.6em; /* Icon size */
+            cursor: pointer;
+            color: #6e6e73;
+            z-index: 10;
+            transition: color 0.2s;
+            line-height: 1; /* Ensure consistent vertical alignment */
+        }
+        #toggle-instructions-btn:hover {
+            color: #007aff;
+        }
+    
+        /* Sidebar Section Base Style - Glassmorphic appearance */
+        .sidebar-section {
+            /* ORIGINAL: background-color: #ffffff; */
+            background: rgba(255, 255, 255, 0.55); /* Whiter, slightly more opaque glass base */
+            padding: 16px; /* Adjusted padding for glass sections */
+            border-radius: 12px; /* More modern rounding */
+            margin-bottom: 20px; /* Consistent spacing */
+            /* ORIGINAL: box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03); */
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0,0,0,0.05); /* Softer shadow */
+            border: 1px solid rgba(255, 255, 255, 0.25); /* Subtle border for definition */
+        }
+    
+        /* Ensure display properties remain */
+        #mode-selector,
+        #search-section,
+        #controls-section,
+        #profile-selector, /* For Directions */
+        #proximity-controls-section, /* For Proximity */
+        #location-list-container,
+        #external-partner-list-container,
+        #station-list-container
+         {
+            /* Common section styling applied */
+        }
+    
+         #proximity-controls-section label,
+         #proximity-controls-section input,
+         #proximity-controls-section select {
+            display: block;
+            margin-bottom: 8px;
+            width: 100%;
+            box-sizing: border-box;
+         }
+         /* Input/select styles in proximity section - overridden below by general glass styles */
+         #proximity-controls-section input[type="number"],
+         #proximity-controls-section select {
+            /* ORIGINAL: padding: 8px 10px; */
+            /* ORIGINAL: border: 1px solid #d1d1d6; */
+            /* ORIGINAL: border-radius: 5px; */
+            /* ORIGINAL: font-size: 0.9em; */
+         }
+         #proximity-controls-section label {
+             margin-bottom: 4px;
+             font-size: 0.85em; /* Adjusted below */
+             /* ORIGINAL: color: #333; */
+             font-weight: 500; /* Adjusted below */
+         }
+    
+    
+        /* Instructions section - specific glass styling */
+        #instructions.sidebar-section { /* Apply glass style to instructions section too */
+            color: #333333;
+            font-size: 0.9em;
+            line-height: 1.5;
+            display: none; /* Initially hidden */
+            /* ORIGINAL: background-color: #eef7ff; */
+            background: rgba(230, 240, 255, 0.75); /* Light blue, glassy */
+            border-color: rgba(200, 220, 255, 0.6);
+            padding: 16px; /* Match other sections */
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        #instructions p { margin-top: 0; margin-bottom: 8px; }
+        #instructions p:last-child { margin-bottom: 0; }
+    
+    
+        #profile-selector { display: none; } /* For Directions */
+        #proximity-controls-section { display: none; } /* For Proximity */
+    
+    
+        /* Styles for Profile and Controls labels (not the mode selector ones) */
+        #profile-selector label,
+        #controls-section label {
+            /* ORIGINAL: margin-right: 10px; */
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.9em; /* Slightly smaller consistent with other elements */
+            color: #2c2c2e; /* Dark text for readability */
+            cursor: pointer;
+            position: relative;
+        }
+    
+        #controls-section label {
+            display: flex; /* Use flex for checkbox alignment */
+            margin-bottom: 10px;
+            padding: 4px 0; /* Add some vertical padding */
+        }
+        #controls-section label:last-child { margin-bottom: 0; }
+    
+        /* Styles for Radio/Checkbox inputs (Profile and Controls) */
+        #profile-selector input[type="radio"],
+        #controls-section input[type="checkbox"] {
+            margin-right: 10px; /* More space */
+            accent-color: #007aff;
+            transform: scale(1.15); /* Slightly larger */
+            cursor: pointer;
+            flex-shrink: 0; /* Prevent checkbox from shrinking */
+        }
+    
+        /* Section Titles - Glassmorphic style */
+        #search-section h3,
+        #profile-selector h3,
+        #proximity-controls-section h3,
+        #location-list-container h3,
+        #external-partner-list-container h3,
+        #station-list-container h3,
+        #controls-section h3 {
+            margin-top: 0;
+            margin-bottom: 14px; /* More space below title */
+            font-size: 0.9em; /* Slightly larger section titles */
+            font-weight: 600;
+            color: #3a3a3c; /* Slightly darker and less saturated than default #6e6e73 for better legibility on glass */
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    
+        /* Search Input, Results, and Map Click Button Styling */
+        /* Search Input Style - Glassmorphic appearance */
+        #search-input {
+            width: 100%;
+            padding: 9px 12px; /* Adjusted padding */
+            margin-bottom: 10px;
+            /* ORIGINAL: border: 1px solid #d1d1d6; */
+            border: 1px solid rgba(200, 200, 205, 0.5); /* Lighter border */
+            border-radius: 8px; /* Consistent rounding */
+            box-sizing: border-box;
+            font-size: 0.9em; /* Slightly smaller */
+            /* ORIGINAL: background-color: #f9f9f9; */
+            background-color: rgba(255, 255, 255, 0.4); /* Glassy input background */
+            color: #1d1d1f; /* Ensure text is dark and readable */
+        }
+        /* Search Input Focus Style - Glassmorphic focus ring */
+        #search-input:focus {
+            /* ORIGINAL: border-color: #007aff; */
+            border-color: #007aff; /* Accent color for focus */
+            outline: none; /* Remove default blue outline */
+            /* ORIGINAL: background-color: #ffffff; */
+            background-color: rgba(255, 255, 255, 0.7); /* More opaque on focus */
+            /* ORIGINAL: box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2); */
+            box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.2); /* Softer, modern focus ring */
+        }
+    
+        #search-results-container {
+            max-height: 180px; /* Limit height of results */
+            overflow-y: auto;
+            border-radius: 7px;
+            background-color: #ffffff; /* Keep white background for results list */
+        }
+        #search-results-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        #search-results-list li {
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 0.9em;
+            color: #1d1d1f;
+            border-bottom: 1px solid #f0f2f5; /* Subtle separator */
+            transition: background-color 0.15s ease;
+        }
+        #search-results-list li:last-child { border-bottom: none; }
+        #search-results-list li:hover { background-color: #e9e9f0; } /* Subtle hover */
+    
+        /* Style for the map click button - Glassmorphic style */
+        .map-click-button { /* Shared by toggle-map-click-mode and run-proximity-analysis */
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 12px; /* Adjusted padding */
+            margin-top: 10px;
+            /* ORIGINAL: border: 1px solid #007aff; */
+            border: 1.5px solid #007aff; /* Slightly thicker border */
+            border-radius: 9px; /* Consistent rounding */
+            /* ORIGINAL: background-color: #f0f2f5; */
+            background-color: rgba(0, 122, 255, 0.1); /* Light glassy base */
+            color: #007aff;
+            font-size: 0.88em; /* Slightly smaller */
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            text-align: center;
+        }
+        .map-click-button:hover {
+            /* ORIGINAL: background-color: #e9f5ff; */
+            background-color: rgba(0, 122, 255, 0.15); /* Lighter hover for outline style */
+            border-color: #005bb5;
+        }
+        .map-click-button.active { /* For toggle-map-click-mode */
+            background-color: #007aff; /* Solid active state for clarity */
+            color: white;
+            border-color: #005bb5;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .map-click-button.active:hover {
+            background-color: #005bb5;
+        }
+    
+    
+        /* Scrollbar for search results (WebKit) */
+        #search-results-container::-webkit-scrollbar { width: 5px; }
+        #search-results-container::-webkit-scrollbar-track { background: transparent; }
+        #search-results-container::-webkit-scrollbar-thumb { background: #c1c1c7; border-radius: 3px;}
+        #search-results-container::-webkit-scrollbar-thumb:hover { background: #a8a8ae; }
+    
+        /* Reset button style - Glassmorphic appearance */
+        #reset-selection {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 11px 18px; /* Adjusted padding */
+            margin-bottom: 20px; /* Consistent spacing */
+            /* ORIGINAL: background-color: #2d93ff; */
+            background-color: rgba(0, 122, 255, 0.75); /* Primary action, glassy */
+            color: white;
+            border: 1px solid transparent; /* Can be transparent if bg is strong, or match accent */
+            border-radius: 9px; /* Consistent rounding */
+            font-weight: 500;
+            font-size: 0.9em; /* Slightly smaller */
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            text-align: center;
+            /* ORIGINAL: box-shadow: none; */
+             box-shadow: 0 3px 8px rgba(0, 122, 255, 0.25), 0 1px 2px rgba(0,0,0,0.05);
+        }
+        #reset-selection:hover {
+            /* ORIGINAL: background-color: #005bb5; */
+             background-color: rgba(0, 110, 230, 0.85);
+             box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35), 0 2px 4px rgba(0,0,0,0.07);
+             transform: translateY(-1px);
+        }
+    
+        /* Combined list styling for all types */
+        #location-list, #external-partner-list, #station-list, #proximity-results-list { list-style-type: none; padding: 0px; margin: 0; }
+        #location-list li, #external-partner-list li, #station-list li, #proximity-results-list li {
+            padding: 10px 14px 10px 38px; /* Adjusted padding-left to make space for the icon/emoji, slightly less vertical */
+            cursor: pointer;
+            transition: background-color 0.15s ease, color 0.15s ease;
+            font-size: 0.92em; /* Slightly smaller text */
+            color: #1d1d1f;
+            border-radius: 7px;
+            margin-bottom: 4px;
+            position: relative;
+        }
+        #proximity-results-list li { cursor: default; } /* Results are not clickable to re-select */
+    
+        #location-list li::before,
+        #external-partner-list li::before,
+        #station-list li::before {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            transition: color 0.15s ease; /* Keep transition for color-based icons */
+        }
+    
+        /* Icons for each type (in the list) */
+        #location-list li.location-item::before {
+            content: ''; /* Change from emoji to empty content for background image */
+            width: 20px; /* Size of the image container */
+            height: 20px; /* Size of the image container */
+            background-image: url('images/bluemarker.png'); /* Path to your blue marker image */
+            background-size: contain; /* Make the image fit */
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        #external-partner-list li.location-item::before {
+             content: '📌';
+             font-size: 1em; /* Slightly smaller emoji */
+             color: #8e8e93; /* Keep default color for emojis */
+        }
+        #station-list li.station-item::before {
+            content: '🚂';
+            font-size: 1em; /* Slightly smaller emoji */
+            color: #8e8e93; /* Keep default color for emojis */
+        }
+         #proximity-results-list li::before { /* Specific rule for proximity results checkmark */
+             content: '✔️';
+             position: absolute; /* Ensure positioning */
+             left: 12px;
+             top: 50%;
+             transform: translateY(-50%);
+             color: #007aff; /* Color of the checkmark */
+             font-size: 1em; /* Adjust size if needed */
+         }
+    
+        #location-list li:last-child,
+        #external-partner-list li:last-child,
+        #station-list li:last-child,
+        #proximity-results-list li:last-child { margin-bottom: 0; }
+    
+        #location-list li:hover,
+        #external-partner-list li:hover,
+        #station-list li:hover { background-color: #e9e9f0; }
+    
+        /* Hover effect for emoji icons (Digipunten now use image, won't be affected by color change) */
+        li:not([class*="selected-"]):hover::before {
+             color: #2289f7;
+        }
+    
+        /* Selection styling */
+        li[data-id].selected-haversine,
+        li[data-id].selected-directions-start,
+        li[data-id].selected-directions-end,
+        li[data-id].selected-proximity-center { /* Added for proximity center */
+             color: white; font-weight: 500;
+        }
+        li[data-id].selected-haversine::before,
+        li[data-id].selected-directions-start::before,
+        li[data-id].selected-directions-end::before,
+        li[data-id].selected-proximity-center::before { /* Added for proximity center */
+            color: white; /* Keep for emoji types */
+        }
+        li[data-id].selected-haversine { background-color: #56a8ff; }
+        li[data-id].selected-directions-start { background-color: #56a8ff; }
+        li[data-id].selected-directions-end { background-color: #67e186; }
+        li[data-id].selected-proximity-center { background-color: #ff9500; } /* Orange for proximity center */
+    
+    
+        #map-container { flex-grow: 1; height: 100vh; }
+    
+        .info-panel {
+            margin-bottom: 20px; padding: 16px; display: none; /* Match section padding and margin */
+            /* ORIGINAL: background-color: #ffffff; */
+            background: rgba(255, 255, 255, 0.55); /* Glassy info panel */
+            border-radius: 12px; /* Match section rounding */
+            /* ORIGINAL: box-shadow: 0 1px 2px rgba(0,0,0,0.03), 0 2px 6px rgba(0,0,0,0.03); */
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0,0,0,0.05); /* Softer shadow */
+            border: 1px solid rgba(255, 255, 255, 0.25); /* Subtle border */
+        }
+        #sidebar > .info-panel:last-of-type { margin-bottom: 0; }
+        .info-panel h3 { font-size: 1em; font-weight: 600; color: #1d1d1f; margin-top: 0; margin-bottom: 15px; }
+        .info-panel ul, .info-panel div { font-size: 0.92em; list-style-type: none; padding: 0; color: #333333; }
+        .info-panel li { padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
+        .info-panel li:last-child { border-bottom: none; }
+        .info-panel .error-message, .info-panel .loading-message { font-style: normal; padding: 5px 0; }
+        .info-panel .error-message { color: #ff3b30; font-weight: 500; }
+        .info-panel .loading-message { color: #555555; }
+        #selected-location-name-haversine { font-weight: 600; color: #007aff; }
+        #selected-location-name-directions-start { font-weight: 600; color: #4da1fa; }
+        #selected-location-name-directions-end { font-weight: 600; color: #55c671; }
+        #proximity-center-name { font-weight: 600; color: #ff9500; } /* Orange for proximity */
+        #proximity-parameters-display { font-size: 0.85em; color: #6e6e73; margin-bottom: 10px; }
+    
+    
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: #ffffff; border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            padding: 0; border: 0.5px solid rgba(0,0,0,0.08);
+        }
+        .custom-popup .leaflet-popup-content {
+            margin: 0; padding: 12px 15px;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #1d1d1f;
+            max-height: 320px; /* Increased max-height for images and opening hours */
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .custom-popup .leaflet-popup-content strong { font-weight: 600; color: #000000; }
+        .custom-popup .leaflet-popup-content em { font-style: italic; color: #555; font-size: 0.9em; }
+        .custom-popup .leaflet-popup-content .hours-block { margin-top: 8px; font-size: 0.9em; line-height: 1.5; }
+        .custom-popup .leaflet-popup-content .hours-block br { margin-bottom: 2px; }
+        .custom-popup .leaflet-popup-content .popup-image {
+            width: 100%;
+            max-height: 100px; /* Adjust as needed, ensuring total popup content fits 300px */
+            object-fit: cover;
+            border-radius: 4px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+    
+        .custom-popup .leaflet-popup-tip { background: #ffffff; border: 0.5px solid rgba(0,0,0,0.08); box-shadow: none; }
+        .custom-popup a.leaflet-popup-close-button {
+            position: absolute; top: 8px; right: 10px; padding: 0; width: 24px; height: 24px;
+            font-size: 22px; line-height: 24px; color: #b0b0b5; text-align: center;
+            text-decoration: none; font-weight: normal; background: transparent;
+            border-radius: 50%; transition: color 0.2s ease, background-color 0.2s ease;
+        }
+        .custom-popup a.leaflet-popup-close-button:hover { color: #1d1d1f; background-color: rgba(0,0,0,0.05); }
+    
+        .leaflet-div-icon { background: none; border: none; }
+        .station-emoji-marker, .external-partner-emoji-marker {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; text-shadow: 0 0 3px rgba(0,0,0,0.3);
+            width: 36px !important; height: 36px !important;
+        }
+    
+        /* Mode Selector Grid Style */
+        #mode-selector {
+            display: grid; /* Use grid layout */
+            grid-template-columns: 1fr 1fr; /* Create two columns of equal width */
+            gap: 10px 20px; /* Add space between rows (10px) and columns (20px) */
+            /* Inherits glassmorphic styles from .sidebar-section */
+            padding: 12px; /* Less padding if buttons take up space */
+            /* ORIGINAL: margin-bottom: 18px; */
+            margin-bottom: 20px; /* Consistent spacing */
+        }
+    
+        /* Hide the actual radio dot for mode selector */
+        #mode-selector input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none; /* Prevent any interaction */
+        }
+    
+        /* Style the labels in mode selector as glass buttons */
+        #mode-selector label {
+            margin-right: 0; /* Remove original margin as grid handles spacing */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative; /* Keep for pseudo-elements if needed later */
+            cursor: pointer;
+    
+            /* Button Styling */
+            padding: 10px 8px; /* Adjust padding; grid provides horizontal spacing via 'gap' */
+            border-radius: 9px;
+            font-size: 0.88em; /* Slightly smaller for dense layout */
+            font-weight: 500; /* Medium weight for button text */
+            text-align: center;
+            color: #2c2c2e; /* Dark text for readability */
+    
+            /* Glass Effect for Label-Buttons */
+            background: rgba(255, 255, 255, 0.3); /* Base glass for buttons */
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.04);
+    
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* Standard material-like transition */
+        }
+    
+        #mode-selector label:hover {
+            background: rgba(255, 255, 255, 0.5);
+            border-color: rgba(255, 255, 255, 0.6);
+            transform: translateY(-1px); /* Subtle lift */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.06);
+            color: #000;
+        }
+    
+        /* STYLING FOR CHECKED STATE (ACTIVATED BUTTON) using :has() */
+        /* Requires modern browser support for :has() */
+        #mode-selector label:has(input[type="radio"]:checked) {
+            background: #beddfe; /* Primary accent color, more solid for active state */
+            color: black;
+            font-weight: 600; /* Bolder text for active state */
+            border-color: rgba(50, 127, 209, 0.7);
+            box-shadow: 0 0 0 1.5px rgba(0, 122, 255, 0.6), /* Outline effect */
+                        inset 0 1px 2px rgba(0, 0, 0, 0.2); /* Inner shadow for pressed feel */
+            transform: translateY(0.5px) scale(0.97); /* Slight press effect */
+        }
+    
+        /* Focus state for accessibility (also uses :has()) */
+         #mode-selector label:has(input[type="radio"]:focus-visible) {
+            outline: 2px solid #007FFF;
+            outline-offset: 3px;
+            border-color: rgba(0,122,255,0.7); /* Ensure border also indicates focus */
+        }
+    
+    
+        /* Update input fields and selects for consistency (glassmorphic) */
+        #sidebar input[type="text"],
+        #sidebar input[type="number"],
+        #sidebar select {
+            /* ORIGINAL values commented/overridden above */
+            background-color: rgba(255, 255, 255, 0.4); /* Glassy input background */
+            border: 1px solid rgba(200, 200, 205, 0.5); /* Lighter border */
+            color: #1d1d1f; /* Ensure text is dark and readable */
+            border-radius: 8px; /* Consistent rounding */
+            padding: 9px 12px; /* Adjust padding for sleekness */
+            font-size: 0.9em;
+        }
+    
+        #sidebar input[type="text"]:focus,
+        #sidebar input[type="number"]:focus,
+        #sidebar select:focus {
+            /* ORIGINAL values commented/overridden above */
+            border-color: #007aff; /* Accent color for focus */
+            outline: none; /* Remove default blue outline */
+            background-color: rgba(255, 255, 255, 0.7); /* More opaque on focus */
+            box-shadow: 0 0 0 2.5px rgba(0, 122, 255, 0.2); /* Softer, modern focus ring */
+        }
+    
+         /* Specific adjustment for proximity section labels (make slightly darker like titles) */
+         #proximity-controls-section label {
+            color: #3a3a3c;
+            font-weight: 600;
+            font-size: 0.9em; /* Match other labels/inputs */
+         }
+    
+    
+        /* Update main action button (#reset-selection) for consistency (glassmorphic) */
+        #reset-selection {
+            /* ORIGINAL values commented/overridden above */
+            background-color: rgba(0, 122, 255, 0.75); /* Primary action, glassy */
+            color: white;
+            border: 1px solid transparent;
+            box-shadow: 0 3px 8px rgba(0, 122, 255, 0.25), 0 1px 2px rgba(0,0,0,0.05);
+            font-weight: 500;
+            padding: 11px 18px; /* Adjust padding */
+            border-radius: 9px;
+            font-size: 0.9em; /* Slightly smaller */
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            text-align: center;
+            margin-bottom: 20px; /* Consistent spacing */
+        }
+    
+        #reset-selection:hover {
+            /* ORIGINAL values commented/overridden above */
+             background-color: rgba(0, 110, 230, 0.85);
+             box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35), 0 2px 4px rgba(0,0,0,0.07);
+             transform: translateY(-1px);
+        }
+    
+        /* Style for map click buttons for consistency (glassmorphic) */
+        .map-click-button {
+            /* ORIGINAL values commented/overridden above */
+            border-radius: 9px;
+            padding: 9px 12px;
+            font-weight: 500;
+            font-size: 0.88em;
+            border: 1.5px solid #007aff;
+            background-color: rgba(0, 122, 255, 0.1); /* Light glassy base */
+            color: #007aff;
+            transition: all 0.2s ease-in-out;
+            text-align: center;
+             margin-top: 10px;
+             width: 100%;
+             box-sizing: border-box;
+        }
+        .map-click-button:hover {
+            /* ORIGINAL values commented/overridden above */
+            background-color: rgba(0, 122, 255, 0.15); /* Lighter hover for outline style */
+            border-color: #005bb5;
+        }
+        .map-click-button.active {
+            /* ORIGINAL values commented/overridden above */
+            background-color: #007aff; /* Solid active state for clarity */
+            color: white;
+            border-color: #005bb5;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .map-click-button.active:hover {
+            background-color: #005bb5;
+        }
+    
+        /* Section Titles - Ensure they are clearly visible on the glassy background */
+        #search-section h3,
+        #profile-selector h3,
+        #proximity-controls-section h3,
+        #location-list-container h3,
+        #external-partner-list-container h3,
+        #station-list-container h3,
+        #controls-section h3 {
+            /* ORIGINAL values commented/overridden above */
+            color: #3a3a3c; /* Slightly darker and less saturated */
+            font-weight: 600;
+            margin-bottom: 14px;
+            font-size: 0.9em; /* Slightly larger */
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    
+        /* Checkbox and its label alignment in #controls-section */
+        #controls-section input[type="checkbox"] {
+            margin-right: 10px; /* More space */
+            transform: scale(1.15); /* Slightly larger */
+            accent-color: #007aff; /* Keep accent */
+            flex-shrink: 0; /* Prevent checkbox from shrinking */
+        }
+        #controls-section label {
+            display: flex; /* Use flex for better alignment of checkbox and text */
+            align-items: center;
+            padding: 4px 0; /* Add some vertical padding */
+            font-size: 0.9em;
+            color: #2c2c2e; /* Darker text for controls */
+            /* ORIGINAL: margin-bottom handled by .sidebar-section > label rule */
+        }
+         #controls-section label:last-child { margin-bottom: 0; }
+    
+    
+    </style>
 </head>
 <body>
     <div id="app-container">
@@ -1880,7 +2133,7 @@
         toggleInstructionsBtn.addEventListener('click', function() {
             const isHidden = instructionsEl.style.display === 'none' || instructionsEl.style.display === '';
             instructionsEl.style.display = isHidden ? 'block' : 'none';
-            this.textContent = isHidden ? ' Hide Instructions' : '💡'; // Optional: change button text
+            this.textContent = isHidden ? ' 💡' : '💡'; // Optional: change button text
         });
 
         proximityTypeSelect.addEventListener('change', (e) => {
